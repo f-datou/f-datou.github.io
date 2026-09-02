@@ -1,0 +1,3058 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>四轴飞行器 - PCB 交互教程</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0d1117; --bg2: #161b22; --bg3: #1c2129;
+      --border: #30363d; --text: #c9d1d9; --text2: #8b949e; --text3: #484f58;
+      --accent: #58a6ff; --card: #161b22; --input-bg: #21262d;
+      --glow-bg: rgba(255,255,200,0.55);
+    }
+    body {
+      font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #161b22 0%, var(--bg3) 100%);
+      border-bottom: 1px solid var(--border); padding: 10px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .header h1 { font-size: 1.1rem; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .header h1 .icon { font-size: 1.3rem; }
+    .header .badge {
+      background: #1f6feb; color: #fff; font-size: 0.7rem;
+      padding: 4px 10px; border-radius: 12px;
+    }
+    .header .nav-tabs { display: flex; gap: 4px; }
+    .header .nav-tab {
+      padding: 6px 16px; border-radius: 6px; font-size: 0.82rem;
+      cursor: pointer; border: 1px solid transparent; color: var(--text2);
+      background: transparent; transition: all 0.2s;
+    }
+    .header .nav-tab:hover { color: var(--text); border-color: var(--border); }
+    .header .nav-tab.active { color: var(--accent); border-color: #1f6feb; background: rgba(31,111,235,0.1); }
+
+    .main { display: flex; height: calc(100vh - 56px); }
+
+    /* 左侧：元件列表 */
+    .sidebar {
+      width: 200px; background: var(--bg2); border-right: 1px solid var(--border);
+      padding: 8px; overflow-y: auto; flex-shrink: 0;
+    }
+    .nav-title {
+      padding: 8px 8px; font-size: 0.85rem; font-weight: 700; color: var(--text);
+      cursor: pointer; user-select: none; border-radius: 6px;
+    }
+    .nav-title:hover { background: var(--bg3); }
+    .nav-sub {
+      padding: 6px 8px; font-size: 0.8rem; color: var(--text);
+      cursor: pointer; user-select: none; border-radius: 6px;
+    }
+    .nav-sub:hover { background: var(--bg3); }
+    .nav-children { padding-left: 6px; }
+    .nav-children.hidden { display: none; }
+    .arrow { font-size: 0.65rem; display: inline-block; width: 12px; }
+    .comp-btn {
+      display: flex; align-items: center; gap: 6px; width: 100%;
+      padding: 5px 8px; margin-bottom: 2px; border-radius: 5px;
+      border: 1px solid transparent; cursor: pointer;
+      background: transparent; color: var(--text2); font-size: 0.73rem; text-align: left;
+      transition: all 0.15s;
+    }
+    .comp-btn:hover { background: var(--bg3); color: var(--text); }
+    .comp-btn.active { background: var(--bg3); border-color: var(--accent); color: var(--text); }
+    .comp-btn .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    /* 中间：PCB 图 */
+    .pcb-area {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: 16px; background: var(--bg);
+      min-width: 0;
+    }
+    .pcb-container {
+      position: relative; display: inline-block; overflow: hidden;
+      border-radius: 12px; cursor: grab;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    }
+    .pcb-container:active { cursor: grabbing; }
+    .pcb-image-wrapper { position: relative; display: inline-block; line-height: 0; }
+    .pcb-base { max-height: 88vh; max-width: 100%; border-radius: 12px; display: block; }
+    .pcb-glow {
+      position: absolute; border-radius: 4px;
+      background: var(--glow-bg);
+      mix-blend-mode: screen;
+      opacity: 0; transition: opacity 0.15s;
+      pointer-events: none;
+    }
+    .pcb-glow.visible { opacity: 1; }
+    .pcb-inner {
+      position: relative;
+      transform-origin: 0 0;
+      transition: none;
+    }
+    .zoom-controls {
+      position: absolute; bottom: 12px; right: 12px; z-index: 5;
+      display: flex; gap: 4px;
+    }
+    .zoom-controls button {
+      width: 32px; height: 32px; border-radius: 8px;
+      border: 1px solid var(--border); background: rgba(22,27,34,0.9); color: var(--text);
+      font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(8px); transition: all 0.2s;
+    }
+    .zoom-controls button:hover { background: var(--bg3); border-color: var(--accent); color: var(--accent); }
+    .zoom-controls .zoom-level { font-size: 0.7rem; color: var(--text2); display: flex; align-items: center; padding: 0 6px; min-width: 40px; justify-content: center; }
+
+    .marker {
+      position: absolute; border: 1px dashed rgba(255,255,255,0.25); border-radius: 4px;
+      cursor: pointer; z-index: 3; background: transparent;
+    }
+    .marker.selected {
+      border: 2px dashed rgba(255,255,255,0.7);
+      background: rgba(255,255,255,0.05);
+    }
+    .marker .label {
+      position: absolute; top: -18px; left: 0;
+      font-size: 9px; padding: 1px 5px; border-radius: 3px;
+      color: #fff; white-space: nowrap; pointer-events: none;
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .marker:hover .label,
+    .marker.selected .label { opacity: 0.85; }
+
+    /* 右侧：信息面板 */
+    .panel {
+      width: 360px; background: var(--bg2); border-left: 1px solid var(--border);
+      padding: 20px; overflow-y: auto; flex-shrink: 0;
+    }
+    .panel h3 { font-size: 1.05rem; color: var(--text); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+    .panel .desc { font-size: 0.78rem; color: var(--text2); line-height: 1.5; }
+    .panel .meta { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+    .panel .meta-item { font-size: 0.7rem; }
+    .panel .section-divider { border: none; border-top: 1px solid var(--input-bg); margin: 10px 0; }
+    .panel .meta-item .key { color: var(--text3); }
+    .panel .meta-item .val { color: var(--text2); }
+
+    /* Collapsible sections */
+    .info-section { margin-top: 10px; border: 1px solid var(--input-bg); border-radius: 8px; overflow: hidden; }
+    .info-section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px; background: var(--bg3); cursor: pointer;
+      font-size: 0.78rem; color: var(--text); user-select: none;
+      transition: background 0.15s;
+    }
+    .info-section-header:hover { background: var(--input-bg); }
+    .info-section-header .arr { font-size: 0.6rem; transition: transform 0.2s; color: var(--text3); }
+    .info-section.collapsed .arr { transform: rotate(-90deg); }
+    .info-section.collapsed .info-section-body { display: none; }
+    .info-section-body { padding: 10px 12px; }
+    .info-section-body .sec-desc { font-size: 0.78rem; color: var(--text2); line-height: 1.6; }
+    .info-section-body .sec-notes {
+      font-size: 0.76rem; color: #b0b0c0; line-height: 1.7;
+    }
+    .info-section-body img {
+      width: 100%; border-radius: 6px; border: 1px solid var(--border);
+      cursor: zoom-in; transition: transform 0.2s;
+    }
+    .info-section-body img:hover { transform: scale(1.02); }
+    .info-extras { margin-top: 10px; }
+
+    .empty-state { text-align: center; padding: 40px 0; color: var(--text3); font-size: 0.85rem; line-height: 1.8; }
+
+    /* 底部调整栏 */
+    .adjust-bar {
+      position: fixed; bottom: 0; left: 200px; right: 360px;
+      background: var(--bg2); border-top: 1px solid var(--border);
+      padding: 8px 16px; display: flex; align-items: center; gap: 12px;
+      font-size: 0.75rem; z-index: 10;
+    }
+    .adjust-bar .label-text { color: var(--text2); white-space: nowrap; }
+    .adjust-bar input[type=range] { flex: 1; accent-color: var(--accent); }
+    .adjust-bar .val { color: var(--accent); font-weight: 700; min-width: 36px; }
+    .adjust-bar button { font-size: 0.7rem; padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text); cursor: pointer; }
+    .adjust-bar button:hover { background: var(--border); }
+
+    .hidden { display: none !important; }
+    .fade-in { animation: fadeIn 0.25s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Program view */
+    #programView { width: 100%; height: 100%; overflow: hidden; align-self: stretch; margin-top: 0; }
+    #progFlowView { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+    #progDetailView { width: 100%; height: 100%; overflow-y: auto; overflow-x: hidden; display: block; }
+    .flow-diagram {
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+      padding: 20px;
+    }
+    .flow-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    .flow-node {
+      background: linear-gradient(135deg, #161b22, var(--bg3));
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 16px 20px; cursor: pointer; text-align: center;
+      min-width: 105px; transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+    }
+    .flow-node:hover {
+      border-color: var(--accent); background: linear-gradient(135deg, var(--bg3), #1f2d3d);
+      transform: translateY(-3px); box-shadow: 0 8px 24px rgba(31,111,235,0.15);
+    }
+    .flow-node.active {
+      border-color: var(--accent); background: linear-gradient(135deg, #1a2a3a, #1f3040);
+      box-shadow: 0 4px 16px rgba(31,111,235,0.2);
+    }
+    .flow-node .fn-icon { font-size: 1.3rem; margin-bottom: 4px; }
+    .flow-node .fn-title { font-size: 0.85rem; color: var(--text); font-weight: 600; margin-bottom: 2px; }
+    .flow-node .fn-sub { font-size: 0.68rem; color: #6e7681; }
+    .flow-node.key .fn-title { color: #ffa657; }
+    .flow-arrow { color: var(--border); font-size: 1.3rem; display: flex; align-items: center; }
+    .flow-arrow-down { color: var(--border); font-size: 1.1rem; text-align: center; margin: 2px 0; }
+    .flow-label { font-size: 0.78rem; color: #6e7681; text-align: center; margin-bottom: 16px; letter-spacing: 2px; }
+    .flow-arrow {
+      color: var(--text3); font-size: 1.2rem; display: flex; align-items: center;
+    }
+    .flow-arrow-down { color: var(--text3); font-size: 1rem; text-align: center; }
+    .flow-label {
+      font-size: 0.7rem; color: var(--text3); text-align: center; margin: 4px 0;
+    }
+    .prog-btn {
+      display: flex; align-items: center; gap: 6px; width: 100%;
+      padding: 5px 8px; margin-bottom: 2px; border-radius: 5px;
+      border: 1px solid transparent; cursor: pointer;
+      background: transparent; color: var(--text2); font-size: 0.73rem; text-align: left;
+      transition: all 0.15s;
+    }
+    .prog-btn:hover { background: var(--bg3); color: var(--text); }
+    .prog-btn.active { background: var(--bg3); border-color: #ffa657; color: #ffa657; }
+    .prog-btn .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Code block */
+    .code-block {
+      background: var(--bg); border: 1px solid var(--input-bg); border-radius: 6px;
+      padding: 12px; font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 0.73rem; line-height: 1.5; color: var(--text);
+      max-height: 300px; overflow-y: auto; white-space: pre-wrap;
+    }
+    .code-block .kw { color: #ff7b72; }
+    .code-block .fn { color: #d2a8ff; }
+    .code-block .cm { color: var(--text2); }
+    .code-block .str { color: #a5d6ff; }
+
+    /* Program detail page */
+    #progDetailView {
+      width: 100%; height: 100%; overflow-y: auto; overflow-x: hidden;
+    }
+    .prog-detail {
+      padding: 24px 32px; color: var(--text);
+    }
+    .prog-detail h2 { font-size: 1.4rem; color: var(--text); margin-bottom: 6px; }
+    .prog-detail .subtitle { font-size: 0.8rem; color: var(--text3); margin-bottom: 24px; }
+    .prog-detail .back-btn {
+      background: var(--input-bg); border: 1px solid var(--border); color: var(--text2);
+      padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.78rem;
+      margin-bottom: 20px; transition: all 0.15s;
+    }
+    .prog-detail .back-btn:hover { border-color: var(--accent); color: var(--text); }
+    .prog-detail h3 { font-size: 1rem; color: var(--text); margin: 24px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--input-bg); }
+    .prog-detail p { font-size: 0.82rem; line-height: 1.8; color: #b0b0c0; margin-bottom: 12px; }
+    .prog-detail ul { font-size: 0.8rem; line-height: 1.9; padding-left: 18px; color: #b0b0c0; margin-bottom: 12px; }
+    .prog-detail ul li { margin-bottom: 4px; }
+    .prog-detail ul li b { color: var(--text); }
+    .prog-detail .highlight-box {
+      background: var(--bg3); border-left: 3px solid #ffa657;
+      padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0;
+      font-size: 0.8rem; line-height: 1.7;
+    }
+    .prog-detail .data-diagram {
+      background: var(--bg); border: 1px solid var(--input-bg); border-radius: 8px;
+      padding: 16px; margin: 12px 0; font-family: 'Consolas', monospace;
+      font-size: 0.75rem; line-height: 1.8; overflow-x: auto;
+    }
+    .prog-detail .data-table {
+      width: 100%; border-collapse: collapse; font-size: 0.78rem; margin: 12px 0;
+    }
+    .prog-detail .data-table th {
+      background: var(--input-bg); color: var(--text2); padding: 8px 12px; text-align: left;
+      font-weight: 600; font-size: 0.72rem; text-transform: uppercase;
+    }
+    .prog-detail .data-table td {
+      padding: 8px 12px; border-bottom: 1px solid var(--input-bg); color: var(--text);
+    }
+    .prog-detail .formula {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: 12px 16px; margin: 10px 0; font-family: 'Consolas', monospace;
+      font-size: 0.78rem; text-align: center; color: #d2a8ff;
+    }
+
+    /* 原理图全屏弹窗 */
+    .modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100;
+      display: flex; align-items: center; justify-content: center; cursor: zoom-out;
+    }
+    .modal img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+
+    @media (max-width: 900px) {
+      .main { flex-direction: column; height: auto; }
+      .sidebar { width: 100%; flex-direction: row; display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; }
+      .sidebar h3 { display: none; }
+      .comp-btn { width: auto; font-size: 0.7rem; padding: 4px 8px; }
+      .panel { width: 100%; }
+      .adjust-bar { left: 0; right: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span class="icon">🚁</span> 四轴飞行器教程</h1>
+  <div class="nav-tabs">
+    <button class="nav-tab active" id="tabDrone" onclick="switchTab('drone')">🚁 飞行器</button>
+    <button class="nav-tab" id="tabRemote" onclick="switchTab('remote')">🎮 遥控器</button>
+  </div>
+  <span class="badge">v2026.06.10</span>
+</div>
+
+<div class="main">
+
+  <!-- 左侧导航 -->
+  <div class="sidebar" id="sidebar">
+    <div class="nav-title" onclick="openSerialTerminal()" style="color:#3fb950;">
+      🔌 串口调试
+    </div>
+    <div class="nav-title" onclick="openPIDDebug()" style="color:#ffa657;">
+      📊 PID调试
+    </div>
+    <div class="nav-title" onclick="toggleNav('drone')">
+      <span class="arrow" id="arrowDrone">▶</span> 无人机
+    </div>
+    <div class="nav-children hidden" id="navDrone">
+      <div class="nav-sub" onclick="toggleNav('hardware')">
+        <span class="arrow" id="arrowHardware">▶</span> 硬件
+      </div>
+      <div class="nav-children hidden" id="navHardware"></div>
+      <div class="nav-sub" onclick="toggleNav('program')">
+        <span class="arrow" id="arrowProgram">▶</span> 程序
+      </div>
+      <div class="nav-children hidden" id="navProgram">
+        <div id="navProgList"></div>
+      </div>
+      <div class="nav-sub" onclick="toggleNav('example')">
+        <span class="arrow" id="arrowExample">▶</span> 例程
+      </div>
+      <div class="nav-children hidden" id="navExample"></div>
+    </div>
+    <div class="nav-title" onclick="toggleNav('remote')" style="margin-top:2px;">
+      <span class="arrow" id="arrowRemote">▶</span> 遥控器
+    </div>
+    <div class="nav-children hidden" id="navRemote">
+      <div class="nav-sub" onclick="toggleNav('remoteHw')">
+        <span class="arrow" id="arrowRemoteHw">▶</span> 硬件
+      </div>
+      <div class="nav-children hidden" id="navRemoteHw"></div>
+      <div class="nav-sub" onclick="toggleNav('remoteProg')">
+        <span class="arrow" id="arrowRemoteProg">▶</span> 程序
+      </div>
+      <div class="nav-children hidden" id="navRemoteProg"></div>
+      <div class="nav-sub" onclick="toggleNav('remoteExample')">
+        <span class="arrow" id="arrowRemoteExample">▶</span> 例程
+      </div>
+      <div class="nav-children hidden" id="navRemoteExample"></div>
+    </div>
+  </div>
+
+  <!-- 中间：PCB 图 / 程序流程 -->
+  <div class="pcb-area" id="centerArea">
+    <!-- PCB view -->
+    <div id="hardwareView">
+    <div class="pcb-container" id="pcbContainer">
+      <div class="pcb-inner" id="pcbInner">
+        <div class="pcb-image-wrapper">
+          <img src="3D_PCB3_2026-06-09.png" alt="四轴飞行器 PCB 3D" class="pcb-base" draggable="false" />
+          <div class="pcb-glow" id="pcbGlow"></div>
+          <div class="pcb-glow" id="pcbGlow2"></div>
+        </div>
+        <!-- markers appended by JS -->
+      </div>
+      <div class="zoom-controls">
+        <button onclick="zoomIn()" title="放大">+</button>
+        <span class="zoom-level" id="zoomLevel">100%</span>
+        <button onclick="zoomOut()" title="缩小">−</button>
+        <button onclick="zoomReset()" title="重置">↺</button>
+      </div>
+    </div>
+    </div><!-- /hardwareView -->
+
+    <!-- Program view - flow diagram -->
+    <div id="programView" class="hidden">
+      <div id="progFlowView"><div class="flow-diagram" id="flowDiagram"></div></div>
+      <div id="progDetailView" class="hidden"></div>
+    </div>
+    
+    <!-- Serial terminal view -->
+    <div id="serialView" class="hidden" style="width:100%;height:100%;display:flex;flex-direction:column;padding:16px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+        <button id="serialConnect" onclick="toggleSerial()" style="background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600;">连接串口</button>
+        <select id="serialPortSelect" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:0.78rem;min-width:180px;" onchange="onPortSelect()">
+          <option value="">选择端口（首次需点连接按钮）</option>
+        </select>
+        <button onclick="refreshSerialPorts()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:6px;cursor:pointer;font-size:0.72rem;" title="刷新端口列表">↻</button>
+        <select id="serialBaud" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:0.82rem;">
+          <option value=9600>9600</option><option value=19200>19200</option><option value=38400>38400</option>
+          <option value=57600>57600</option><option value=115200 selected>115200</option><option value=256000>256000</option>
+        </select>
+        <span id="serialStatus" style="font-size:0.78rem;color:var(--text2);">未连接</span>
+        <span style="flex:1"></span>
+        <button onclick="clearSerial()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.78rem;">清空</button>
+        <button id="serialPause" onclick="pauseSerial()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.78rem;">暂停</button>
+      </div>
+      <div id="serialOutput" style="flex:1;background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:14px;font-family:'Consolas','Courier New',monospace;font-size:0.8rem;color:#3fb950;overflow-y:auto;white-space:pre-wrap;word-break:break-all;">
+        <span style="color:var(--text3);">等待连接串口设备...</span>
+      </div>
+    </div>
+
+    <!-- PID debug view -->
+    <div id="pidView" class="hidden" style="width:100%;height:100%;display:flex;flex-direction:column;padding:16px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+        <button id="pidConnect" onclick="togglePIDSerial()" style="background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600;">连接串口</button>
+        <select id="pidPortSelect" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:0.78rem;min-width:180px;" onchange="onPIDPortSelect()">
+          <option value="">选择端口（首次需点连接按钮）</option>
+        </select>
+        <button onclick="refreshPIDPorts()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:6px;cursor:pointer;font-size:0.72rem;">↻</button>
+        <select id="pidBaud" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:0.82rem;">
+          <option value=9600>9600</option><option value=38400>38400</option><option value=57600>57600</option><option value=115200 selected>115200</option><option value=256000>256000</option>
+        </select>
+        <span id="pidStatus" style="font-size:0.78rem;color:var(--text2);">未连接</span>
+        <span style="flex:1"></span>
+        <span style="font-size:0.72rem;color:var(--accent);">期望值</span><span style="color:var(--accent);font-size:1rem;">━</span>
+        <span style="font-size:0.72rem;color:#f0883e;">实际值</span><span style="color:#f0883e;font-size:1rem;">━</span>
+        <button onclick="clearPID()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.78rem;">清空</button>
+        <button id="pidPause" onclick="pausePID()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.78rem;">暂停</button>
+      </div>
+      <div style="flex:1;background:#0d1117;border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative;">
+        <canvas id="pidCanvas" style="width:100%;height:100%;"></canvas>
+        <div id="pidPlaceholder" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text3);font-size:0.85rem;">等待数据...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 右侧信息面板 -->
+  <div class="panel" id="panel">
+    <div class="empty-state">
+      点击左侧元件或 PCB 图上<br>的彩色标记查看详细资料
+    </div>
+  </div>
+
+</div>
+
+<!-- 底部调整栏 -->
+<div class="adjust-bar hidden" id="adjustBar">
+  <span id="adjustName" style="color:var(--text);white-space:nowrap;">选择元件</span>
+  <span class="label-text">左</span>
+  <button onclick="adjustVal('x', -0.5)">-</button>
+  <input type="number" id="adjLeft" value="50" step="0.5" style="width:55px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:0.75rem;text-align:center;" onchange="onSliderChange()" />
+  <button onclick="adjustVal('x', 0.5)">+</button>
+  <span class="label-text">上</span>
+  <button onclick="adjustVal('y', -0.5)">-</button>
+  <input type="number" id="adjTop" value="50" step="0.5" style="width:55px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:0.75rem;text-align:center;" onchange="onSliderChange()" />
+  <button onclick="adjustVal('y', 0.5)">+</button>
+  <span class="label-text">宽</span>
+  <button onclick="adjustVal('w', -0.5)">-</button>
+  <input type="number" id="adjW" value="10" step="0.5" style="width:55px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:0.75rem;text-align:center;" onchange="onSliderChange()" />
+  <button onclick="adjustVal('w', 0.5)">+</button>
+  <span class="label-text">高</span>
+  <button onclick="adjustVal('h', -0.5)">-</button>
+  <input type="number" id="adjH" value="10" step="0.5" style="width:55px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:0.75rem;text-align:center;" onchange="onSliderChange()" />
+  <button onclick="adjustVal('h', 0.5)">+</button>
+  <button onclick="exportCoords()">导出坐标</button>
+</div>
+
+<!-- 原理图弹窗 -->
+<div class="modal hidden" id="modal" onclick="closeModal()">
+  <img id="modalImg" src="" alt="原理图" />
+</div>
+
+<script>
+const components = [
+  {
+    id: 'stm32',
+    name: 'STM32F103C8T6',
+    desc: '主控芯片，ARM Cortex-M3 内核，72MHz，负责飞行控制算法、传感器数据融合、电机控制信号输出。',
+    color: 'var(--accent)',
+    schematic: 'STM32.png',
+    hasDatasheet: true,
+    datasheetFile: 'STM32F103x8B数据手册（英文）.pdf',
+    x: 48.5, y: 60, w: 12.5, h: 11,
+  },
+  {
+    id: 'mpu6050',
+    name: 'MPU6050',
+    desc: '六轴陀螺仪+加速度计，通过 I2C 接口连接主控，检测飞行器姿态角度和加速度，是飞行姿态控制的核心传感器。',
+    color: '#f0883e',
+    schematic: 'mpu6050.png',
+    x: 42.5, y: 46, w: 16.5, h: 8,
+  },
+  {
+    id: 'spl06',
+    name: 'SPL06',
+    desc: '高精度气压计，通过 I2C 接口连接主控，测量大气压力从而计算飞行高度，实现定高功能。',
+    color: '#a371f7',
+    schematic: 'SPL06.png',
+    x: 59.5, y: 50, w: 8, h: 6,
+  },
+  {
+    id: 'nrf24l01',
+    name: 'NRF24L01',
+    desc: '2.4GHz 无线通信模块，通过 SPI 接口连接主控，用于遥控器和飞行器之间的数据传输。',
+    color: '#e3b341',
+    schematic: 'NRF24L01.png',
+    x: 43, y: 20, w: 14, h: 23,
+  },
+  {
+    id: 'power',
+    name: '电源模块',
+    desc: '包含电池输入接口、电源开关、稳压电路。将电池电压（3.7V~4.2V）降压至 3.3V 供给主控和传感器。',
+    color: '#f85149',
+    schematic: 'power.png',
+    notes: `电源部分解析原理解析：
+由于四轴在飞行过程中，电量不断下降，当下降到一定程度后，可能会出现瞬间低于 3.3V，这样稳压就会无法正常工作，导致输出截断，所以配备升压。
+升压：BL8530 5V 升压 IC
+BL8530 升压 IC 需要 47uH 电感作为储能，内部集成类似 BOOST 升压电路，大家学过电路原理的都会学到 BOOST 升压电路。而这个肖特基二极管，在这里起到续流作用。
+稳压：662K 3.3V 稳压 IC，稳压（LDO）这个很好理解，这里就不详细解释了
+电容：电源上的电容都是滤波用的，这个是固定的接法，也是设计常识，电源的输入输出都要电容做滤除电源纹波`,
+    x: 31, y: 40.5, w: 10.5, h: 23,
+  },
+  {
+    id: 'led',
+    name: 'LED 驱动电路 1',
+    desc: 'LED 指示灯驱动电路（左），用于显示飞行器当前状态。',
+    color: '#3fb950',
+    schematic: 'led-driver.png',
+    x: 34, y: 21, w: 7.5, h: 9.5,
+    linkId: 'led',
+  },
+  {
+    id: 'led2',
+    name: 'LED 驱动电路 2',
+    desc: 'LED 指示灯驱动电路（右），用于显示飞行器当前状态。',
+    color: '#3fb950',
+    schematic: 'led-driver.png',
+    x: 58, y: 20, w: 7.5, h: 10.5,
+    linkId: 'led',
+  },
+  {
+    id: 'swd',
+    name: '下载接口',
+    desc: 'SWD 调试/烧录接口，用于连接 ST-Link 烧录器，给主控下载程序固件。',
+    color: '#39d2c0',
+    schematic: 'download-port.png',
+    x: 66.5, y: 33.5, w: 8, h: 10,
+  },
+  {
+    id: 'reset',
+    name: 'RESET 电路',
+    desc: '复位电路，用于手动复位主控芯片，上电时自动复位确保稳定启动。',
+    color: '#ff7b72',
+    schematic: 'reset.png',
+    notes: `上电自动复位：电容电压不能突变，上电瞬间 NRST=GND（低电平复位）；电源经电阻给电容充电，电容充满后 NRST 拉高，退出复位。
+由于PCB空间有限，故没有加按键复位。`,
+    x: 62, y: 70, w: 5.5, h: 4,
+  },
+  {
+    id: 'motor1',
+    name: '电机 1',
+    desc: '1 号电机接口，通过 PWM 控制 NMOS 管驱动无刷电机。',
+    color: '#ffa657',
+    schematic: 'motor1.png',
+    notes: `以下逐条分析每个元器件的作用
+100Ω 电阻：起到限流作用，在 MOS 开启瞬间时需要吃电流，如果电流过大，会导致瞬间开启，缩短 MOS 管的寿命。
+10K 电阻：IC 在复位状态下，所有 IO 口都处于浮空输入状态，加 10K 下拉电阻就可以避免在单片机还没工作时，MOS 导通，电机疯狂旋转打伤人。
+2302：NMOS，高电平导通。通过 PWM 占空比控制 MOS 管的导通，从而控制电机的平均功率。2302 在门级开启电压 Vth=3.3V 下导通电流可达 3A
+104 电容：吸收电机转动产生的高频杂讯`,
+    x: 73.5, y: 76, w: 12, h: 6, rotate: 45,
+  },
+  {
+    id: 'motor2',
+    name: '电机 2',
+    desc: '2 号电机接口，通过 PWM 控制 NMOS 管驱动无刷电机。',
+    color: '#ffa657',
+    schematic: 'motor2.png',
+    notes: `以下逐条分析每个元器件的作用
+100Ω 电阻：起到限流作用，在 MOS 开启瞬间时需要吃电流，如果电流过大，会导致瞬间开启，缩短 MOS 管的寿命。
+10K 电阻：IC 在复位状态下，所有 IO 口都处于浮空输入状态，加 10K 下拉电阻就可以避免在单片机还没工作时，MOS 导通，电机疯狂旋转打伤人。
+2302：NMOS，高电平导通。通过 PWM 占空比控制 MOS 管的导通，从而控制电机的平均功率。2302 在门级开启电压 Vth=3.3V 下导通电流可达 3A
+104 电容：吸收电机转动产生的高频杂讯`,
+    x: 75.5, y: 15, w: 6, h: 11.5, rotate: 45,
+  },
+  {
+    id: 'motor3',
+    name: '电机 3',
+    desc: '3 号电机接口，通过 PWM 控制 NMOS 管驱动无刷电机。',
+    color: '#ffa657',
+    schematic: 'motor3.png',
+    notes: `以下逐条分析每个元器件的作用
+100Ω 电阻：起到限流作用，在 MOS 开启瞬间时需要吃电流，如果电流过大，会导致瞬间开启，缩短 MOS 管的寿命。
+10K 电阻：IC 在复位状态下，所有 IO 口都处于浮空输入状态，加 10K 下拉电阻就可以避免在单片机还没工作时，MOS 导通，电机疯狂旋转打伤人。
+2302：NMOS，高电平导通。通过 PWM 占空比控制 MOS 管的导通，从而控制电机的平均功率。2302 在门级开启电压 Vth=3.3V 下导通电流可达 3A
+104 电容：吸收电机转动产生的高频杂讯`,
+    x: 17.5, y: 72.5, w: 6, h: 12, rotate: 45,
+  },
+  {
+    id: 'motor4',
+    name: '电机 4',
+    desc: '4 号电机接口，通过 PWM 控制 NMOS 管驱动无刷电机。',
+    color: '#ffa657',
+    schematic: 'motor4.png',
+    notes: `以下逐条分析每个元器件的作用
+100Ω 电阻：起到限流作用，在 MOS 开启瞬间时需要吃电流，如果电流过大，会导致瞬间开启，缩短 MOS 管的寿命。
+10K 电阻：IC 在复位状态下，所有 IO 口都处于浮空输入状态，加 10K 下拉电阻就可以避免在单片机还没工作时，MOS 导通，电机疯狂旋转打伤人。
+2302：NMOS，高电平导通。通过 PWM 占空比控制 MOS 管的导通，从而控制电机的平均功率。2302 在门级开启电压 Vth=3.3V 下导通电流可达 3A
+104 电容：吸收电机转动产生的高频杂讯`,
+    x: 14.5, y: 16.5, w: 11, h: 6, rotate: 45,
+  },
+  {
+    id: 'osc',
+    name: '晶振电路',
+    desc: '外部晶振，提供稳定的时钟信号给主控芯片。',
+    color: '#d2a8ff',
+    schematic: 'crystal.png',
+    x: 49.5, y: 72.5, w: 8.5, h: 6,
+  },
+  {
+    id: 'adc',
+    name: 'ADC 检测',
+    desc: '模数转换输入，用于检测电池电压等模拟信号。',
+    color: '#79c0ff',
+    schematic: 'ADC.png',
+    x: 35.5, y: 66, w: 6, h: 5.5,
+  },
+  {
+    id: 'uart1',
+    name: 'UART1',
+    desc: '串口 1 通信接口，用于连接外部串口设备或调试输出。',
+    color: '#56d364',
+    schematic: 'UART1.png',
+    x: 24, y: 29.5, w: 7, h: 10,
+  },
+  {
+    id: 'uart3',
+    name: 'UART3',
+    desc: '串口 3 通信接口，用于连接外部串口设备或调试输出。',
+    color: '#56d364',
+    schematic: 'UART3.png',
+    x: 69.5, y: 60, w: 6.5, h: 10.5,
+  },
+  {
+    id: 'powerLed',
+    name: '电源指示灯',
+    desc: '电源状态指示灯，上电后亮起，用于判断供电是否正常。',
+    color: '#ffdd44',
+    schematic: 'power-led.png',
+    x: 61.5, y: 41.5, w: 5, h: 4.5,
+  },
+];
+
+let activeCompId = null;
+const pcbContainer = document.getElementById('pcbContainer');
+const pcbInner = document.getElementById('pcbInner');
+const panel = document.getElementById('panel');
+const sidebar = document.getElementById('sidebar');
+
+// === Zoom & Pan ===
+let zoom = 1, panX = 0, panY = 0;
+let dragging = false, dragStartX = 0, dragStartY = 0, startPanX = 0, startPanY = 0;
+
+function applyTransform() {
+  pcbInner.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+}
+
+pcbContainer.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = pcbContainer.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const oldZoom = zoom;
+  zoom = Math.min(4, Math.max(0.3, zoom - e.deltaY * 0.001));
+  panX = mx - (mx - panX) * (zoom / oldZoom);
+  panY = my - (my - panY) * (zoom / oldZoom);
+  applyTransform();
+}, { passive: false });
+
+pcbContainer.addEventListener('mousedown', (e) => {
+  if (e.target.tagName === 'IMG' || e.target === pcbInner) {
+    dragging = true;
+    dragStartX = e.clientX; dragStartY = e.clientY;
+    startPanX = panX; startPanY = panY;
+    e.preventDefault();
+  }
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  panX = startPanX + e.clientX - dragStartX;
+  panY = startPanY + e.clientY - dragStartY;
+  applyTransform();
+});
+
+window.addEventListener('mouseup', () => { dragging = false; });
+
+// Click on PCB background to deselect
+pcbInner.addEventListener('click', (e) => {
+  if (e.target === pcbInner || e.target === pcbInner.querySelector('img') || e.target.id === 'pcbGlow') {
+    activeCompId = null;
+    document.querySelectorAll('.pcb-glow').forEach(g => {
+      g.classList.remove('visible');
+      g.style.transform = '';
+    });
+    panel.innerHTML = '<div class="empty-state">点击 PCB 图上的<br>元件区域查看详细资料</div>';
+  }
+});
+
+window.zoomIn  = () => { zoom = Math.min(4, zoom * 1.25); applyTransform(); };
+window.zoomOut = () => { zoom = Math.max(0.3, zoom / 1.25); applyTransform(); };
+window.zoomReset = () => { zoom = 1; panX = 0; panY = 0; applyTransform(); };
+
+// Highlight linked components
+function highlightLinks(comp, show) {
+  const allComps = [...components, ...remoteComponents];
+  const linked = comp.linkId
+    ? allComps.filter(c => c.linkId === comp.linkId)
+    : [comp];
+  const glowIds = ['pcbGlow', 'pcbGlow2'];
+  linked.forEach((c, i) => {
+    const glow = document.getElementById(glowIds[i] || 'pcbGlow');
+    if (!glow) return;
+    if (show) {
+      glow.style.left = c.x + '%';
+      glow.style.top = c.y + '%';
+      glow.style.width = c.w + '%';
+      glow.style.height = c.h + '%';
+      glow.style.transform = c.rotate ? `rotate(${c.rotate}deg)` : '';
+      glow.classList.add('visible');
+    } else {
+      glow.classList.remove('visible');
+      glow.style.transform = '';
+    }
+  });
+}
+
+// Build markers and sidebar
+components.forEach((comp, index) => {
+  // Sidebar button
+  const btn = document.createElement('button');
+  btn.className = 'comp-btn';
+  btn.innerHTML = `<span class="dot" style="background:${comp.color}"></span>${comp.name}`;
+  btn.onclick = () => {
+    document.getElementById('hardwareView').classList.remove('hidden');
+    document.getElementById('programView').classList.add('hidden');
+    selectComponent(comp.id);
+  };
+  document.getElementById('navHardware').appendChild(btn);
+  comp._btn = btn;
+
+  // Marker (invisible click/hover zone)
+  const marker = document.createElement('div');
+  marker.className = 'marker';
+  const rot = comp.rotate ? `transform:rotate(${comp.rotate}deg);` : '';
+  marker.style.cssText = `
+    left:${comp.x}%; top:${comp.y}%;
+    width:${comp.w}%; height:${comp.h}%;
+    ${rot}
+  `;
+  marker.innerHTML = `<span class="label" style="background:${comp.color}">${comp.name}</span>`;
+  marker.onclick = (e) => { e.stopPropagation(); selectComponent(comp.id); };
+
+  // Hover: element highlight via glow layer
+  marker.onmouseenter = () => {
+    highlightLinks(comp, true);
+    document.body.style.cursor = 'pointer';
+  };
+  marker.onmouseleave = () => {
+    if (activeCompId !== comp.id) highlightLinks(comp, false);
+    document.body.style.cursor = '';
+  };
+
+  pcbInner.appendChild(marker);
+  comp._marker = marker;
+});
+
+function selectComponent(id) {
+  const comp = components.find(c => c.id === id) || remoteComponents.find(c => c.id === id);
+  if (!comp) return;
+
+  activeCompId = id;
+
+  // Clear all selected markers, set current
+  [...components, ...remoteComponents].forEach(c => {
+    if (c._marker) c._marker.classList.remove('selected');
+  });
+  if (comp._marker) comp._marker.classList.add('selected');
+
+  // Show glow for selected component and linked
+  highlightLinks(comp, true);
+
+  // Update sidebar and markers
+  [...components, ...remoteComponents].forEach(c => {
+    if (c._btn) c._btn.classList.toggle('active', c.id === id);
+    if (c._marker) c._marker.classList.remove('selected');
+  });
+  if (comp._marker) comp._marker.classList.add('selected');
+
+  // Update panel
+  let infoHTML = `
+    <h3>${comp.name}</h3>
+    <div class="meta">
+      <div class="meta-item"><span class="key">位置：</span><span class="val">左${comp.x}% / 上${comp.y}% · ${comp.w}% × ${comp.h}%</span></div>
+    </div>
+
+    <div class="info-section">
+      <div class="info-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
+        功能简介 <span class="arr">▼</span>
+      </div>
+      <div class="info-section-body">
+        <div class="sec-desc">${comp.desc}</div>
+      </div>
+    </div>
+  `;
+
+  if (comp.notes) {
+    infoHTML += `
+    <div class="info-section">
+      <div class="info-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
+        原理解析 <span class="arr">▼</span>
+      </div>
+      <div class="info-section-body">
+        <div class="sec-notes">${comp.notes.replace(/\n/g, '<br>')}</div>
+      </div>
+    </div>
+    `;
+  }
+
+  if (comp.schematic) {
+    infoHTML += `
+    <div class="info-section">
+      <div class="info-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
+        关联原理图 <span class="arr">▼</span>
+      </div>
+      <div class="info-section-body">
+        <img src="${comp.schematic}" alt="${comp.name} 原理图"
+             onclick="openModal('${comp.schematic}')" title="点击放大" />
+        <p style="font-size:0.65rem;color:var(--text3);margin-top:4px;">点击图片可放大查看</p>
+      </div>
+    </div>
+    `;
+  }
+
+  if (comp.hasDatasheet) {
+    infoHTML += `
+    <div class="info-extras">
+      <a href="${comp.datasheetFile}" target="_blank"
+         style="color:var(--accent);font-size:0.78rem;text-decoration:none;">
+        查看完整数据手册 (PDF) →
+      </a>
+    </div>
+    `;
+  }
+
+  panel.innerHTML = infoHTML;
+
+  // Update adjust bar
+  document.getElementById('adjustName').textContent = comp.name;
+  document.getElementById('adjLeft').value = comp.x;
+  document.getElementById('adjTop').value = comp.y;
+  document.getElementById('adjW').value = comp.w;
+  document.getElementById('adjH').value = comp.h;
+  document.getElementById('adjustBar').classList.remove('hidden');
+}
+
+// Slider change handler
+// Direct value adjustment via +/- buttons
+window.adjustVal = function(field, delta) {
+  if (!activeCompId) return;
+  const comp = [...components, ...remoteComponents].find(c => c.id === activeCompId);
+  if (!comp) return;
+  comp[field] = parseFloat((comp[field] + delta).toFixed(1));
+  document.getElementById('adjLeft').value = comp.x;
+  document.getElementById('adjTop').value = comp.y;
+  document.getElementById('adjW').value = comp.w;
+  document.getElementById('adjH').value = comp.h;
+  applyMarkerUpdate(comp);
+};
+
+// Number input change handler
+window.onSliderChange = function() {
+  if (!activeCompId) return;
+  const comp = [...components, ...remoteComponents].find(c => c.id === activeCompId);
+  if (!comp) return;
+  comp.x = parseFloat(document.getElementById('adjLeft').value) || comp.x;
+  comp.y = parseFloat(document.getElementById('adjTop').value) || comp.y;
+  comp.w = parseFloat(document.getElementById('adjW').value) || comp.w;
+  comp.h = parseFloat(document.getElementById('adjH').value) || comp.h;
+  applyMarkerUpdate(comp);
+};
+
+function applyMarkerUpdate(comp) {
+  const rot = comp.rotate ? `transform:rotate(${comp.rotate}deg);` : '';
+  comp._marker.style.cssText = `
+    left:${comp.x}%; top:${comp.y}%;
+    width:${comp.w}%; height:${comp.h}%;
+    ${rot}
+  `;
+  comp._marker.innerHTML = `<span class="label" style="background:${comp.color}">${comp.name}</span>`;
+
+  comp._marker.onmouseenter = () => {
+    highlightLinks(comp, true);
+    document.body.style.cursor = 'pointer';
+  };
+  comp._marker.onmouseleave = () => {
+    if (activeCompId !== comp.id) highlightLinks(comp, false);
+    document.body.style.cursor = '';
+  };
+
+  // Refresh glow if selected
+  if (activeCompId === comp.id) highlightLinks(comp, true);
+
+  const metaDiv = panel.querySelector('.meta');
+  if (metaDiv) {
+    metaDiv.innerHTML = `
+      <div class="meta-item"><span class="key">位置：</span><span class="val">左${comp.x}% / 上${comp.y}% · ${comp.w}% × ${comp.h}%</span></div>
+    `;
+  }
+}
+
+// Modal
+window.openModal = function(src) {
+  document.getElementById('modalImg').src = src;
+  document.getElementById('modal').classList.remove('hidden');
+};
+window.closeModal = function() {
+  document.getElementById('modal').classList.add('hidden');
+};
+
+// Sidebar toggle
+window.toggleNav = function(section) {
+  const children = document.getElementById('nav' + section.charAt(0).toUpperCase() + section.slice(1));
+  const arrow = document.getElementById('arrow' + section.charAt(0).toUpperCase() + section.slice(1));
+  if (children) {
+    children.classList.toggle('hidden');
+    if (arrow) arrow.textContent = children.classList.contains('hidden') ? '▶' : '▼';
+  }
+  // Switch to remote PCB when opening remote hardware
+  if (section === 'remoteHw' && children && !children.classList.contains('hidden')) {
+    document.getElementById('hardwareView').classList.remove('hidden');
+    document.getElementById('programView').classList.add('hidden');
+    switchProduct('remote');
+  }
+};
+
+// Export
+window.exportCoords = function() {
+  const list = currentProduct === 'remote' ? remoteComponents : components;
+  let out = '';
+  list.forEach(c => {
+    out += `${c.name}: left=${c.x}%, top=${c.y}%, width=${c.w}%, height=${c.h}%\n`;
+  });
+  alert('当前坐标（' + (currentProduct === 'remote' ? '遥控器' : '无人机') + '）：\n\n' + out + '\n请截图保存。');
+};
+
+// ============ Program view ============
+
+const programModules = [
+  {
+    id: 'prog_init',
+    name: '程序框架',
+    icon: 'var(--accent)',
+    isKey: false,
+    desc: '上电后首先运行，依次初始化外设、传感器和定时器，为飞行控制做准备。',
+    order: 1,
+    code: `// ALL_Init() - 程序框架函数
+void ALL_Init(void)
+{
+    IIC_Init();              // I2C 总线初始化
+    pid_param_Init();        // PID 控制参数初始化
+    LEDInit();               // LED 指示灯初始化
+    USART3_Config();         // 串口 3 配置
+    MpuInit();               // MPU6050 传感器初始化
+    NRF24L01_init();         // 2.4G 遥控通信初始化
+    TIM2_PWM_Config();       // 4路 PWM 电机输出初始化
+    delay_ms(5000);          // 等待电压稳定，SPL06 采集基准高度
+    TIM3_Config();           // 系统定时器启动（3ms 周期）
+}`,
+    explanation: `<p>程序框架是飞行器上电后的第一步，按顺序完成以下工作：</p>
+<ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;">
+<li><b>I2C 初始化</b> — 配置 I2C 总线，用于与 MPU6050、SPL06 等传感器通信</li>
+<li><b>PID 参数初始化</b> — 加载内环（速率）和外环（角度）的 P/I/D 系数</li>
+<li><b>LED 初始化</b> — 配置 LED 指示灯引脚</li>
+<li><b>串口初始化</b> — 配置 USART3，用于调试输出或外部模块通信</li>
+<li><b>MPU6050 初始化</b> — 检测传感器、配置量程和采样率</li>
+<li><b>NRF24L01 初始化</b> — 初始化 2.4G 无线模块，准备接收遥控信号</li>
+<li><b>PWM 初始化</b> — 配置 TIM2 的 4 路 PWM 输出，控制 4 个电机</li>
+<li><b>延时 5 秒</b> — 等待电源稳定、传感器预热、气压计采集基准</li>
+<li><b>TIM3 启动</b> — 启动 1ms 周期定时器中断，飞行控制主循环开始</li>
+</ul>`,
+  },
+  {
+    id: 'prog_sensor',
+    name: '传感器读取',
+    icon: '#f0883e',
+    isKey: true,
+    desc: '通过 I2C 读取 MPU6050 六轴数据（加速度+角速度），3ms 读取一次。',
+    order: 2,
+    code: `// MpuGetData() - 读取 MPU6050 数据并滤波
+#define Gyro_Read() IIC_read_Bytes(ADDR,0x3B,buffer,6)
+#define Acc_Read()  IIC_read_Bytes(ADDR,0x43,&buffer[6],6)
+
+void MpuGetData(void)
+{
+    u8 i;
+    u8 buffer[12];
+
+    Gyro_Read();  // 读取加速度计 6 字节
+    Acc_Read();   // 读取陀螺仪 6 字节
+
+    for(i=0; i<6; i++)
+    {
+        // 高低字节拼接，减去零偏校准值
+        pMpu[i] = (((s16)buffer[i<<1] << 8)
+                  | buffer[(i<<1)+1]) - MpuOffset[i];
+
+        if(i < 3) // 加速度计：一维卡尔曼滤波
+        {
+            static struct _1_ekf_filter ekf[3] = {
+              {0.02,0,0,0,0.001,0.543},
+              {0.02,0,0,0,0.001,0.543},
+              {0.02,0,0,0,0.001,0.543}};
+            kalman_1(&ekf[i], (float)pMpu[i]);
+            pMpu[i] = (s16)ekf[i].out;
+        }
+
+        if(i > 2) // 陀螺仪：一阶低通滤波
+        {
+            const float factor = 0.15f;
+            static float tBuff[3];
+            u8 k = i-3;
+            pMpu[i] = tBuff[k]
+              = tBuff[k]*(1-factor) + pMpu[i]*factor;
+        }
+    }
+}`,
+    explanation: `<p>MPU6050 通过 I2C 接口读取 12 字节原始数据（6 字节加速度 + 6 字节陀螺仪），数据在读取时就进行滤波处理：</p>
+<ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;">
+<li><b>零偏校准</b> — 每个原始值减去 MpuOffset 校准值（初始化时自动采集）</li>
+<li><b>加速度计（i&lt;3）</b> — 一维卡尔曼滤波，去除高频噪声，保持信号平滑</li>
+<li><b>陀螺仪（i&gt;2）</b> — 一阶低通滤波，factor=0.15，滤除电机振动噪声</li>
+<li><b>滤波在读取时就完成</b>，上层拿到的 pMpu[] 已经是干净数据</li>
+<li><b>数据流向</b>：I2C 读取 → 减去零偏 → 卡尔曼/低通滤波 → 干净数据 → 姿态解算</li>
+</ul>`,
+  },
+  {
+    id: 'prog_attitude',
+    name: '姿态解算',
+    icon: '#a371f7',
+    isKey: true,
+    desc: '融合加速度计和陀螺仪数据，通过卡尔曼滤波计算当前飞行姿态角度。',
+    order: 3,
+    code: `// GetAngle() - Mahony互补滤波 四元数姿态解算
+void GetAngle(const _st_Mpu *pMpu, _st_AngE *pAngE, float dt)
+{
+    static float KpDef = 0.8f;       // 比例增益
+    static float KiDef = 0.0003f;    // 积分增益
+    static Quaternion NumQ = {1,0,0,0};
+    static struct V GyroIntegError = {0};
+
+    float HalfTime = dt * 0.5f;
+
+    // ① 四元数 → 理论重力方向
+    Gravity.x = 2*(NumQ.q1*NumQ.q3 - NumQ.q0*NumQ.q2);
+    Gravity.y = 2*(NumQ.q0*NumQ.q1 + NumQ.q2*NumQ.q3);
+    Gravity.z = 1-2*(NumQ.q1*NumQ.q1 + NumQ.q2*NumQ.q2);
+
+    // ② 加速度归一化
+    NormQuat = Q_rsqrt(squa(accX)+squa(accY)+squa(accZ));
+    Acc.x = pMpu->accX * NormQuat;
+    Acc.y = pMpu->accY * NormQuat;
+    Acc.z = pMpu->accZ * NormQuat;
+
+    // ③ 叉积 = 姿态误差向量
+    AccGravity.x = (Acc.y*Gravity.z - Acc.z*Gravity.y);
+    AccGravity.y = (Acc.z*Gravity.x - Acc.x*Gravity.z);
+    AccGravity.z = (Acc.x*Gravity.y - Acc.y*Gravity.x);
+
+    // ④ 互补滤波：P(快速修正) + I(消除零偏漂移)
+    GyroIntegError.x += AccGravity.x * KiDef;
+    GyroIntegError.y += AccGravity.y * KiDef;
+    GyroIntegError.z += AccGravity.z * KiDef;
+
+    Gyro.x = pMpu->gyroX*Gyro_Gr + KpDef*AccGravity.x + GyroIntegError.x;
+    Gyro.y = pMpu->gyroY*Gyro_Gr + KpDef*AccGravity.y + GyroIntegError.y;
+    Gyro.z = pMpu->gyroZ*Gyro_Gr + KpDef*AccGravity.z + GyroIntegError.z;
+
+    // ⑤ 一阶龙格库塔更新四元数
+    q0_t = (-NumQ.q1*Gyro.x - NumQ.q2*Gyro.y - NumQ.q3*Gyro.z) * HalfTime;
+    q1_t = ( NumQ.q0*Gyro.x - NumQ.q3*Gyro.y + NumQ.q2*Gyro.z) * HalfTime;
+    q2_t = ( NumQ.q3*Gyro.x + NumQ.q0*Gyro.y - NumQ.q1*Gyro.z) * HalfTime;
+    q3_t = (-NumQ.q2*Gyro.x + NumQ.q1*Gyro.y + NumQ.q0*Gyro.z) * HalfTime;
+
+    NumQ.q0 += q0_t; NumQ.q1 += q1_t;
+    NumQ.q2 += q2_t; NumQ.q3 += q3_t;
+
+    // 四元数归一化（防止数值漂移）
+    NormQuat = Q_rsqrt(squa(q0)+squa(q1)+squa(q2)+squa(q3));
+    NumQ.q0 *= NormQuat; NumQ.q1 *= NormQuat;
+    NumQ.q2 *= NormQuat; NumQ.q3 *= NormQuat;
+
+    // ⑥ 四元数 → 欧拉角
+    vecxZ = 2*NumQ.q0*NumQ.q2 - 2*NumQ.q1*NumQ.q3;
+    vecyZ = 2*NumQ.q2*NumQ.q3 + 2*NumQ.q0*NumQ.q1;
+    veczZ = 1 - 2*NumQ.q1*NumQ.q1 - 2*NumQ.q2*NumQ.q2;
+
+    // 偏航：纯陀螺仪积分（无磁力计），±3°/s 静区防漂移
+    float yaw_G = pMpu->gyroZ * Gyro_G;
+    if((yaw_G > 3.0f) || (yaw_G < -3.0f))
+        pAngE->yaw += yaw_G * dt;
+
+    pAngE->pitch = asin(vecxZ) * RtA;           // 俯仰角
+    pAngE->roll  = atan2f(vecyZ, veczZ) * RtA;  // 横滚角
+}`,
+    explanation: `<p>使用 Mahony 互补滤波算法，基于四元数融合陀螺仪和加速度计数据：</p>
+<ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;">
+<li><b>互补滤波</b> — 陀螺仪短时准 + 加速度计长期稳，两者互补</li>
+<li><b>四元数</b> — 比欧拉角更稳定，避免万向节锁死，计算量小</li>
+<li><b>Kp=0.8</b> — 比例增益，加速度计误差的修正速度</li>
+<li><b>Ki=0.0003</b> — 积分增益，消除陀螺仪长期零偏漂移</li>
+<li><b>数据流向</b>：陀螺仪角速度 + 加速度修正 → 四元数更新 → 欧拉角 → PID</li>
+</ul>`,
+  },
+  {
+    id: 'prog_rc',
+    name: '遥控接收',
+    icon: '#e3b341',
+    isKey: false,
+    desc: '通过 NRF24L01 接收遥控器发出的油门、俯仰、横滚、偏航指令。',
+    order: 4,
+    code: `// RC_Analy() — NRF24L01 遥控数据解析
+void RC_Analy(void)
+{
+    static uint16_t cnt;
+    // 接收32字节数据包
+    if(NRF24L01_RxPacket(RC_rxData) == SUCCESS)
+    {
+        cnt = 0;
+        // 校验：帧头(0xAA,0xAF) + 校验和
+        uint8_t CheckSum = 0;
+        for(int i=0; i<31; i++) CheckSum += RC_rxData[i];
+
+        if(RC_rxData[31]==CheckSum
+           && RC_rxData[0]==0xAA && RC_rxData[1]==0xAF)
+        {
+            // 解析8通道（每通道2字节，范围1000~2000）
+            Remote.roll  = LIMIT(RC_rxData[4]<<8|RC_rxData[5],  1000,2000);
+            Remote.pitch = LIMIT(RC_rxData[6]<<8|RC_rxData[7],  1000,2000);
+            Remote.thr   = LIMIT(RC_rxData[8]<<8|RC_rxData[9],  1000,2000);
+            Remote.yaw   = LIMIT(RC_rxData[10]<<8|RC_rxData[11],1000,2000);
+            Remote.AUX1  = LIMIT(RC_rxData[12]<<8|RC_rxData[13],1000,2000);
+            // ... AUX2~4 同理
+
+            // 遥控值 → 控制量
+            pidRoll.desired  = -(Remote.roll-1500) * 0.04f;
+            pidPitch.desired = -(Remote.pitch-1500)* 0.04f;
+            if(Remote.yaw>1820)  pidYaw.desired += 0.45f;
+            if(Remote.yaw<1180)  pidYaw.desired -= 0.45f;
+
+            // AUX1 定高开关
+            ALL_flag.height_lock = (Remote.AUX1>1700);
+
+            Remote.thr *= 0.9f;  // 油门限幅90%
+            remote_unlock();      // 判断解锁/上锁
+        }
+    }
+    else  // 3秒无信号 → 自动上锁
+    {
+        if(++cnt > 2000) {
+            cnt = 0;
+            ALL_flag.unlock = 0;
+            NRF24L01_init();  // 重新初始化无线模块
+        }
+    }
+}`,
+    explanation: `<p>通过 NRF24L01 接收 32 字节遥控数据包，解析 8 个通道并转换为控制量：</p>
+<ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;">
+<li><b>数据校验</b> — 帧头 0xAA+0xAF + 31字节校验和，确保数据正确</li>
+<li><b>通道映射</b> — Roll/Pitch/Thr/Yaw + 4个AUX通道，范围1000~2000</li>
+<li><b>角度转换</b> — Roll/Pitch 以1500为中心，比例系数0.04，最大约±20°</li>
+<li><b>定高开关</b> — AUX1>1700 开启定高模式</li>
+<li><b>信号丢失保护</b> — 超过3秒无信号自动上锁，防止飞丢</li>
+<li><b>数据流向</b>：遥控器 → NRF24L01 → 校验解析 → 角度设定值 → PID</li>
+</ul>`,
+  },
+  {
+    id: 'prog_pid',
+    name: 'PID 控制',
+    icon: '#f85149',
+    isKey: true,
+    desc: '串级 PID 控制器，内环控制角速度，外环控制角度，输出电机 PWM 值。',
+    order: 5,
+    code: `// FlightPidControl() — 串级PID + 状态机
+void FlightPidControl(float dt)
+{
+    static uint8_t status = WAITING_1;
+
+    switch(status)
+    {
+    case WAITING_1:  // 等待解锁
+        if(ALL_flag.unlock) status = READY_11;
+        break;
+
+    case READY_11:  // 准备：复位所有PID
+        pidRest(pPidObject, 8);  // 清零积分、输出、上次误差
+        pidYaw.desired = pidYaw.measured = Angle.yaw = 0;
+        status = PROCESS_31;
+        break;
+
+    case PROCESS_31:  // 正常飞行控制
+        // 倾斜保护：超过50°紧急停机
+        if(fabs(Angle.pitch)>50 || fabs(Angle.roll)>50)
+            ALL_flag.unlock = EMERGENT;
+
+        // 内环测量值 = 陀螺仪角速度
+        pidRateX.measured = MPU6050.gyroX * Gyro_G;
+        pidRateY.measured = MPU6050.gyroY * Gyro_G;
+        pidRateZ.measured = MPU6050.gyroZ * Gyro_G;
+
+        // 外环测量值 = 姿态角
+        pidPitch.measured = Angle.pitch;
+        pidRoll.measured  = Angle.roll;
+        pidYaw.measured   = Angle.yaw;
+
+        // Roll轴：外环(角度) → 内环(角速度)
+        pidUpdate(&pidRoll, dt);
+        pidRateX.desired = pidRoll.out;
+        pidUpdate(&pidRateX, dt);
+
+        // Pitch轴：外环(角度) → 内环(角速度)
+        pidUpdate(&pidPitch, dt);
+        pidRateY.desired = pidPitch.out;
+        pidUpdate(&pidRateY, dt);
+
+        // Yaw轴：串级PID
+        CascadePID(&pidRateZ, &pidYaw, dt);
+        break;
+
+    case EXIT_255:  // 紧急退出：复位PID
+        pidRest(pPidObject, 8);
+        status = WAITING_1;
+        break;
+    }
+    // 紧急状态检测：强制退出
+    if(ALL_flag.unlock == EMERGENT) status = EXIT_255;
+}`,
+    explanation: `<p>串级 PID 控制器，通过状态机管理飞行状态。Roll/Pitch/Yaw 三轴独立控制，每轴分为外环（角度环）和内环（角速度环）：</p>
+<ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;">
+<li><b>外环（角度环）</b> — 输入目标角度 vs 当前角度，输出目标角速度</li>
+<li><b>内环（角速度环）</b> — 输入目标角速度 vs 实际角速度，输出电机修正量</li>
+<li><b>状态机</b> — 等待解锁 → 复位PID → 正常控制 → 紧急退出</li>
+<li><b>倾斜保护</b> — 超过 ±50° 自动紧急停机</li>
+<li><b>数据流向</b>：遥控角度 → [外环PID] → 目标角速度 → [内环PID] → 电机PWM</li>
+</ul>`,
+  },
+  {
+    id: 'prog_motor',
+    name: '电机输出',
+    icon: '#3fb950',
+    isKey: false,
+    desc: '将 PID 计算结果转换为 PWM 占空比，控制 4 个 MOS 管驱动无刷电机。',
+    order: 6,
+    code: `// MotorControl() — 电机PWM输出 + X型四轴分配
+void MotorControl(void)
+{
+    static uint8_t status = WAITING_1;
+
+    switch(status)
+    {
+    case WAITING_1:  // 等待解锁，电机输出清零
+        MOTOR1 = MOTOR2 = MOTOR3 = MOTOR4 = 0;
+        if(ALL_flag.unlock) status = WAITING_2;
+        break;
+
+    case WAITING_2:  // 等待油门推过1100
+        if(Remote.thr > 1100) status = PROCESS_31;
+        break;
+
+    case PROCESS_31:  // 正常控制
+        // 油门基准值
+        if(ALL_flag.height_lock)  // 定高模式：用高度PID输出
+            temp = pidHeightRate.out;
+        else  // 手动模式：用遥控器油门
+            if(Remote.thr < 1020) { motors=0; break; }
+            temp = Remote.thr - 1000;
+
+        MOTOR1 = MOTOR2 = MOTOR3 = MOTOR4 = LIMIT(temp, 0, 800);
+
+        // X型四轴动力分配
+        //      机头
+        //   PWM3    PWM2
+        //      *     *
+        //       *   *
+        //        *
+        //       *   *
+        //      *     *
+        //   PWM4    PWM1
+        MOTOR1 += +pidRateX.out -pidRateY.out -pidRateZ.out;
+        MOTOR2 += +pidRateX.out +pidRateY.out +pidRateZ.out;
+        MOTOR3 += -pidRateX.out +pidRateY.out -pidRateZ.out;
+        MOTOR4 += -pidRateX.out -pidRateY.out +pidRateZ.out;
+        break;
+
+    case EXIT_255:  // 紧急停机
+        MOTOR1 = MOTOR2 = MOTOR3 = MOTOR4 = 0;
+        status = WAITING_1;
+        break;
+    }
+
+    // 写入PWM寄存器（限幅0~1000）
+    TIM2->CCR1 = LIMIT(MOTOR1, 0, 1000);
+    TIM2->CCR2 = LIMIT(MOTOR2, 0, 1000);
+    TIM2->CCR3 = LIMIT(MOTOR3, 0, 1000);
+    TIM2->CCR4 = LIMIT(MOTOR4, 0, 1000);
+}`,
+    explanation: `<p>将 PID 计算结果按 X 型四轴布局分配到 4 个电机，通过 TIM2 的 4 路 PWM 输出：</p>
+<ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;">
+<li><b>油门基准</b> — 手动模式用遥控油门，定高模式用高度PID输出</li>
+<li><b>动力分配矩阵</b> — pidRateX 控横滚，pidRateY 控俯仰，pidRateZ 控偏航</li>
+<li><b>限幅保护</b> — 输出限制在 0~1000 范围内</li>
+<li><b>状态机</b> — 等待解锁 → 等油门 → 正常输出 → 紧急停机</li>
+<li><b>数据流向</b>：PID修正量 → X型分配 → PWM → TIM2 → MOS管 → 电机</li>
+</ul>`,
+  },
+];
+
+let activeProgId = null;
+
+// Build program sidebar entries
+const navProgList = document.getElementById('navProgList');
+programModules.forEach(m => {
+  const btn = document.createElement('button');
+  btn.className = 'prog-btn';
+  btn.innerHTML = `<span class="dot" style="background:${m.icon}"></span>${m.name}`;
+  btn.onclick = () => {
+    // Switch to program view
+    document.getElementById('hardwareView').classList.add('hidden');
+    document.getElementById('programView').classList.remove('hidden');
+    // Hide adjust bar
+    document.getElementById('adjustBar').classList.add('hidden');
+    selectProgramModule(m.id);
+  };
+  navProgList.appendChild(btn);
+  m._pbtn = btn;
+});
+
+// Build flow diagram
+const flowDiag = document.getElementById('flowDiagram');
+let flowHTML = '<div class="flow-label">◉ 飞行器程序流程图 ◉</div><div class="flow-row">';
+
+// Row 1: 初始化 → 传感器读取 → 姿态解算
+const row1 = programModules.filter(m => m.order <= 3);
+row1.forEach((m, i) => {
+  flowHTML += `<div class="flow-node${m.isKey ? ' key' : ''}" id="fn_${m.id}" onclick="selectProgramModule('${m.id}')">
+    <div class="fn-title">${m.name}</div>
+    <div class="fn-sub">${m.desc.slice(0,20)}...</div>
+  </div>`;
+  if (i < row1.length - 1) flowHTML += '<div class="flow-arrow">→</div>';
+});
+
+flowHTML += '</div><div class="flow-arrow-down">↓</div><div class="flow-row">';
+
+// Row 2: 遥控接收 → PID控制 → 电机输出
+const row2 = programModules.filter(m => m.order >= 4);
+row2.forEach((m, i) => {
+  flowHTML += `<div class="flow-node${m.isKey ? ' key' : ''}" id="fn_${m.id}" onclick="selectProgramModule('${m.id}')">
+    <div class="fn-title">${m.name}</div>
+    <div class="fn-sub">${m.desc.slice(0,20)}...</div>
+  </div>`;
+  if (i < row2.length - 1) flowHTML += '<div class="flow-arrow">→</div>';
+});
+
+flowHTML += '</div>';
+flowDiag.innerHTML = flowHTML;
+
+// Extra:遥控接收 also feeds into PID (diagonal arrow text)
+const pidNode = document.getElementById('fn_prog_pid');
+if (pidNode) {
+  pidNode.querySelector('.fn-sub').textContent = '串级 PID | 内外环控制';
+}
+
+function selectProgramModule(id) {
+  const m = programModules.find(x => x.id === id);
+  if (!m) return;
+  activeProgId = id;
+
+  // Update sidebar
+  programModules.forEach(x => x._pbtn.classList.toggle('active', x.id === id));
+
+  // Update flow nodes
+  programModules.forEach(x => {
+    const el = document.getElementById('fn_' + x.id);
+    if (el) el.classList.toggle('active', x.id === id);
+  });
+
+  // 程序框架 → 返回流程图
+  if (id === 'prog_init') {
+    showProgramFlow();
+    panel.innerHTML = buildPanelContent(m);
+    return;
+  }
+
+  // Show detail page for modules that have one
+  if (programDetailPages[id]) {
+    showProgramDetail(id);
+    return;
+  }
+
+  // Fallback: show in right panel
+  panel.innerHTML = buildPanelContent(m);
+}
+
+function showProgramDetail(id) {
+  document.getElementById('progFlowView').classList.add('hidden');
+  const detail = document.getElementById('progDetailView');
+  detail.classList.remove('hidden');
+  detail.innerHTML = programDetailPages[id]();
+  detail.classList.add('fade-in');
+  panel.innerHTML = '<div class="empty-state">← 左侧为详细说明<br>点击底部按钮返回流程图</div>';
+}
+
+function showProgramFlow() {
+  const flow = document.getElementById('progFlowView');
+  flow.classList.remove('hidden');
+  flow.classList.add('fade-in');
+  document.getElementById('progDetailView').classList.add('hidden');
+  panel.innerHTML = '<div class="empty-state">点击流程图中的模块<br>查看详细说明</div>';
+}
+
+function buildPanelContent(m) {
+  const keyBadge = m.isKey ? ' <span style="font-size:0.6rem;background:#ffa657;color:#000;padding:1px 6px;border-radius:8px;">核心模块</span>' : '';
+  let html = `<h3>${m.name}${keyBadge}</h3>
+    <div class="info-section">
+      <div class="info-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
+        功能说明 <span class="arr">▼</span>
+      </div>
+      <div class="info-section-body">
+        <div class="sec-notes">${m.explanation}</div>
+      </div>
+    </div>
+    <div class="info-section">
+      <div class="info-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
+        源代码 <span class="arr">▼</span>
+      </div>
+      <div class="info-section-body">
+        <div class="code-block">${escapeHTML(m.code)}</div>
+      </div>
+    </div>`;
+  return html;
+}
+
+// Program detail pages
+const programDetailPages = {
+  'prog_sensor': () => {
+    const m = programModules.find(x => x.id === 'prog_sensor');
+    const h = (s) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<div class="prog-detail">' +
+      '<button class="back-btn" onclick="showProgramFlow()">← 返回流程图</button>' +
+      '<h2>传感器读取 — MPU6050</h2>' +
+      '<p class="subtitle">六轴陀螺仪 + 加速度计，通过 I2C 总线与主控通信</p>' +
+
+      '<h3>一、MPU6050 是什么</h3>' +
+      '<p>MPU6050 是 InvenSense 公司的六轴运动传感器芯片，内部集成了：</p>' +
+      '<ul>' +
+        '<li><b>三轴加速度计</b> — 测量 X/Y/Z 三个方向的加速度（含重力加速度），用于计算飞行器的俯仰角和横滚角</li>' +
+        '<li><b>三轴陀螺仪</b> — 测量绕 X/Y/Z 三轴的旋转角速度，用于短时间内的姿态跟踪</li>' +
+        '<li><b>I2C 接口</b> — 通过 SDA/SCL 两根线与 STM32 通信</li>' +
+        '<li><b>量程配置</b> — 加速度计 ±4G，陀螺仪 ±2000°/s</li>' +
+      '</ul>' +
+
+      '<h3>二、数据如何传输</h3>' +
+      '<p>STM32 通过 I2C 总线连续读取 12 字节数据：</p>' +
+      '<div class="data-diagram">' +
+        '字节序号  0    1    2    3    4    5    6    7    8    9    10   11<br>' +
+        '数据内容  AXH  AXL  AYH  AYL  AZH  AZL  GXH  GXL  GYH  GYL  GZH  GZL<br>' +
+        '所属传感器 ←── 加速度计（6 字节）────→  ←── 陀螺仪（6 字节）────→<br>' +
+        '数组索引      i=0         i=1         i=2         i=3         i=4         i=5' +
+      '</div>' +
+      '<p>每个轴用 <b>2 个字节</b>（高字节 + 低字节）表示一个 16 位有符号整数：</p>' +
+      '<div class="formula">实际值 = (高字节 × 256) + 低字节（等价于高字节左移 8 位后拼接）</div>' +
+
+      '<h3>三、零偏校准</h3>' +
+      '<p>传感器上电后，即使静止不动也会输出微小的非零值（零偏）。飞行器在初始化时通过 <b>MpuGetOffset()</b> 自动采集零偏：</p>' +
+      '<ul>' +
+        '<li>等待飞行器静止 → 采集 356 组数据</li>' +
+        '<li>去掉前 100 组（等待稳定）→ 后 256 组取平均值 = 零偏值 MpuOffset[]</li>' +
+        '<li>之后每次读取数据都<b>减去零偏</b>，保证静止时读数为 0</li>' +
+      '</ul>' +
+
+      '<h3>四、滤波器 — 数据为什么需要滤波</h3>' +
+      '<p>四轴飞行器工作时，电机高速旋转产生强烈振动，传感器原始数据充满噪声。程序在读取时就进行滤波：</p>' +
+      '<table class="data-table">' +
+        '<tr><th>数据类型</th><th>滤波方式</th><th>参数</th><th>作用</th></tr>' +
+        '<tr><td>加速度计 (i&lt;3)</td><td>一维卡尔曼滤波</td><td>Q=0.02, R=0.001</td><td>去除振动噪声，保持信号真实变化</td></tr>' +
+        '<tr><td>陀螺仪 (i&gt;2)</td><td>一阶低通滤波</td><td>factor=0.15</td><td>滤除电机高频振动，保留真实角速度</td></tr>' +
+      '</table>' +
+      '<div class="highlight-box"><b>为什么两种滤波不同？</b><br>加速度计数据含重力分量，变化缓慢但噪声大 → 用卡尔曼滤波（更智能的加权平均）<br>陀螺仪数据变化快速、噪声小 → 用简单的一阶低通滤波就足够</div>' +
+
+      '<h3>五、卡尔曼滤波（加速度计用）</h3>' +
+      '<p>卡尔曼滤波同时参考两个信息源，加权平均得到最优估计：</p>' +
+      '<ul>' +
+        '<li><b>预测值</b>：根据上一时刻的状态，预测当前值应该是什么</li>' +
+        '<li><b>测量值</b>：传感器实际读到的值</li>' +
+        '<li><b>加权平均</b>：预测不确定性 Q=0.02，测量噪声 R=0.001</li>' +
+      '</ul>' +
+      '<div class="formula">输出 = 预测值 + K × (测量值 - 预测值)（K 是卡尔曼增益，动态计算）</div>' +
+
+      '<h3>六、一阶低通滤波（陀螺仪用）</h3>' +
+      '<p>用简单的公式让输出平滑变化：</p>' +
+      '<div class="formula">本次输出 = 上次输出 × 0.85 + 新读数值 × 0.15</div>' +
+      '<p>新值只占 15% 的权重，变化越剧烈衰减越多，电机的高频振动就被过滤掉了。</p>' +
+
+      '<h3>七、完整数据流</h3>' +
+      '<div class="data-diagram">' +
+        'MPU6050 传感器<br>' +
+        '    │  I2C 总线<br>' +
+        '    ▼<br>' +
+        '12 字节原始数据（6 轴 × 2 字节）<br>' +
+        '    │<br>' +
+        '    ▼ 高低字节拼接<br>' +
+        '6 个 int16_t 数值<br>' +
+        '    │<br>' +
+        '    ▼ 减去 MpuOffset 零偏校准<br>' +
+        '去零偏后的原始值<br>' +
+        '    │<br>' +
+        '    ├── 加速度 X/Y/Z → 一维卡尔曼滤波 → 干净加速度<br>' +
+        '    │<br>' +
+        '    └── 陀螺仪 X/Y/Z → 一阶低通滤波 → 干净角速度<br>' +
+        '    │<br>' +
+        '    ▼<br>' +
+        'pMpu[0..5] = 可直接使用的传感器数据' +
+      '</div>' +
+
+      '<h3>八、源代码</h3>' +
+      '<div class="code-block">' + h(m.code) + '</div>' +
+
+      '<button class="back-btn" onclick="showProgramFlow()" style="margin-top:20px;">← 返回流程图</button>' +
+    '</div>';
+  },
+
+  'prog_attitude': () => {
+    const m = programModules.find(x => x.id === 'prog_attitude');
+    const h = (s) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<div class="prog-detail">' +
+      '<button class="back-btn" onclick="showProgramFlow()">← 返回流程图</button>' +
+      '<h2>姿态解算 — Mahony 互补滤波</h2>' +
+      '<p class="subtitle">融合陀螺仪和加速度计数据，通过四元数计算飞行器姿态角</p>' +
+
+      '<h3>一、姿态解算是做什么的</h3>' +
+      '<p>拿到 MPU6050 的原始数据后，需要<b>计算出飞行器当前的实际姿态</b>（俯仰角 Pitch、横滚角 Roll、偏航角 Yaw）。</p>' +
+      '<p>陀螺仪测量的角速度积分可得角度，但会随时间漂移；加速度计通过重力方向算角度，长期稳定但受振动干扰大。姿态解算就是把两者的优点结合起来。</p>' +
+
+      '<h3>二、核心算法：Mahony 互补滤波器</h3>' +
+      '<p>本程序使用 <b>Mahony 互补滤波算法</b>，基于四元数进行计算。四元数是表示三维旋转的数学工具，比欧拉角更稳定，不会出现万向节锁死问题。</p>' +
+
+      '<h3>三、算法流程（6 步）</h3>' +
+
+      '<p><b>第 1 步 — 预测重力方向</b></p>' +
+      '<p>从当前四元数推算出"理论上重力应该指向哪个方向"：</p>' +
+      '<div class="formula">Gravity = 四元数旋转矩阵 × 参考重力向量 [0, 0, 1]</div>' +
+
+      '<p><b>第 2 步 — 加速度归一化</b></p>' +
+      '<p>将加速度计读到的值归一化为单位向量，这个向量就是"实际测量到的重力方向"：</p>' +
+      '<div class="formula">Acc_norm = Acc / sqrt(ax² + ay² + az²)</div>' +
+
+      '<p><b>第 3 步 — 计算误差（叉积）</b></p>' +
+      '<p>理论重力方向与实际重力方向的叉积 = 姿态估计的误差：</p>' +
+      '<div class="formula">Error = Acc_measured × Gravity_predicted</div>' +
+      '<div class="highlight-box">叉积结果是一个向量，方向表示"往哪边偏了"，大小表示"偏了多少"。这个误差用来修正陀螺仪数据。</div>' +
+
+      '<p><b>第 4 步 — 互补滤波修正陀螺仪</b></p>' +
+      '<p>用误差的 P（比例）和 I（积分）分量修正陀螺仪角速度：</p>' +
+      '<div class="formula">Gyro_corrected = Gyro_raw + Kp × Error + Ki × ∫Error</div>' +
+      '<ul>' +
+        '<li><b>Kp = 0.8</b>（比例增益）— 快速响应，误差大时修正快</li>' +
+        '<li><b>Ki = 0.0003</b>（积分增益）— 缓慢修正陀螺仪的长期漂移（零偏）</li>' +
+      '</ul>' +
+
+      '<p><b>第 5 步 — 四元数更新（龙格库塔法）</b></p>' +
+      '<p>用修正后的角速度更新四元数：</p>' +
+      '<div class="formula">q_new = q + 0.5 × dt × [0, Gyro_x, Gyro_y, Gyro_z] ⊗ q</div>' +
+      '<p>每次更新后将四元数<b>重新归一化</b>，防止数值漂移。</p>' +
+
+      '<p><b>第 6 步 — 四元数转欧拉角</b></p>' +
+      '<div class="formula">Pitch = arcsin( 2×(q0·q2 − q1·q3) ) × 57.3°<br>Roll = arctan2( 2×(q2·q3 + q0·q1), 1−2×(q1²+q2²) ) × 57.3°</div>' +
+      '<p>偏航角（Yaw）在本程序中直接使用陀螺仪 Z 轴积分（因无磁力计），且设置了 ±3°/s 的静区防止微小漂移。</p>' +
+
+      '<h3>四、为什么用互补滤波而不是卡尔曼</h3>' +
+      '<div class="highlight-box"><b>效率优先</b>：Mahony 互补滤波计算量远小于卡尔曼，适合 STM32F103（72MHz）这类算力有限的 MCU。<br><b>效果足够</b>：对于四轴飞行器这种小角度、高频控制的场景，互补滤波完全满足需求。<br><b>参数少</b>：只有 Kp 和 Ki 两个参数需要调试，比卡尔曼的 Q/R 矩阵直观得多。</div>' +
+
+      '<h3>五、数据流全景</h3>' +
+      '<div class="data-diagram">' +
+        '陀螺仪（角速度） ──────────────────────┐<br>' +
+        '                                          │<br>' +
+        '                                          ▼<br>' +
+        '                  ┌─ Kp × 比例误差 ────── + ─── 修正后角速度 ──→ 四元数更新<br>' +
+        '                  │                        ▲<br>' +
+        '                  ├─ Ki × 积分误差 ────────┘<br>' +
+        '                  │<br>' +
+        '加速度计 → 归一化 → 叉积（误差）──┘<br>' +
+        '                  ↑<br>' +
+        '重力预测（来自四元数）<br>' +
+        '<br>' +
+        '四元数 ──→ 转欧拉角 ──→ Pitch / Roll / Yaw ──→ PID 控制器' +
+      '</div>' +
+
+      '<h3>六、源代码</h3>' +
+      '<div class="code-block">' + h(m.code) + '</div>' +
+
+      '<button class="back-btn" onclick="showProgramFlow()" style="margin-top:20px;">← 返回流程图</button>' +
+    '</div>';
+  },
+
+  'prog_pid': () => {
+    const m = programModules.find(x => x.id === 'prog_pid');
+    const h = (s) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<div class="prog-detail">' +
+      '<button class="back-btn" onclick="showProgramFlow()">← 返回流程图</button>' +
+      '<h2>PID 控制 — 串级PID飞行控制器</h2>' +
+      '<p class="subtitle">外环角度控制 + 内环角速度控制，三轴独立，状态机管理</p>' +
+
+      '<h3>一、什么是串级 PID</h3>' +
+      '<p>普通单级 PID 直接控制角度，响应慢且容易震荡。串级 PID 使用<b>两层 PID 串联</b>：</p>' +
+      '<div class="highlight-box">' +
+        '<b>外环（角度环）</b>：输入 = 目标角度 - 当前角度，输出 = 目标角速度<br>' +
+        '<b>内环（角速度环）</b>：输入 = 目标角速度 - 实际角速度，输出 = 电机修正量<br>' +
+        '→ 外环决定"要转多快"，内环决定"怎么转"。外环慢而稳，内环快而准。' +
+      '</div>' +
+
+      '<h3>二、三轴控制结构</h3>' +
+      '<table class="data-table">' +
+        '<tr><th>轴</th><th>外环PID</th><th>内环PID</th><th>测量来源</th></tr>' +
+        '<tr><td>Roll（横滚）</td><td>pidRoll</td><td>pidRateX</td><td>Angle.roll / gyroX</td></tr>' +
+        '<tr><td>Pitch（俯仰）</td><td>pidPitch</td><td>pidRateY</td><td>Angle.pitch / gyroY</td></tr>' +
+        '<tr><td>Yaw（偏航）</td><td>pidYaw</td><td>pidRateZ</td><td>Angle.yaw / gyroZ</td></tr>' +
+      '</table>' +
+
+      '<h3>三、PID 计算公式</h3>' +
+      '<p>程序使用标准位置式 PID：</p>' +
+      '<div class="formula">误差 = 目标值 - 测量值 + 偏置<br>' +
+        '积分 += 误差 × dt<br>' +
+        '微分 = (本次误差 - 上次误差) / dt<br>' +
+        '输出 = Kp × 误差 + Ki × 积分 + Kd × 微分</div>' +
+      '<p>实际 PID 参数（5.5万转电机）：</p>' +
+      '<table class="data-table">' +
+        '<tr><th>参数</th><th>Roll/Pitch 内环</th><th>Yaw 内环</th><th>Roll/Pitch 外环</th></tr>' +
+        '<tr><td>Kp</td><td>1.0</td><td>3.0</td><td>3.5</td></tr>' +
+        '<tr><td>Ki</td><td>0.75</td><td>0.0</td><td>—</td></tr>' +
+        '<tr><td>Kd</td><td>0.13</td><td>0.3</td><td>—</td></tr>' +
+      '</table>' +
+
+      '<h3>四、状态机</h3>' +
+      '<p>FlightPidControl 使用状态机确保飞行安全：</p>' +
+      '<div class="data-diagram">' +
+        '上电 → WAITING_1（等待解锁）<br>' +
+        '         │ 解锁信号<br>' +
+        '         ▼<br>' +
+        '     READY_11（清零所有PID积分和输出）<br>' +
+        '         │<br>' +
+        '         ▼<br>' +
+        '  PROCESS_31（正常飞行控制，每3ms执行一次）<br>' +
+        '    │         │<br>' +
+        '    │         倾斜超50°或紧急信号<br>' +
+        '    │              │<br>' +
+        '    │              ▼<br>' +
+        '    └──────→ EXIT_255（复位PID，电机停转）<br>' +
+        '                    │<br>' +
+        '                    ▼<br>' +
+        '              WAITING_1（回到等待）' +
+      '</div>' +
+
+      '<h3>五、数据流全景</h3>' +
+      '<div class="data-diagram">' +
+        '遥控器设定角度 ──→ [外环 PID] ──→ 目标角速度 ──→ [内环 PID] ──→ 电机修正量<br>' +
+        '                      ↑ 反馈                   ↑ 反馈<br>' +
+        '                 当前姿态角              实际陀螺仪角速度<br>' +
+        '                 （来自姿态解算）          （来自 MPU6050）<br>' +
+        '<br>' +
+        '最终 PWM = 油门基准 + pidRateX.out ± pidRateY.out ± pidRateZ.out' +
+      '</div>' +
+
+      '<h3>六、为什么用串级 PID</h3>' +
+      '<div class="highlight-box">' +
+        '<b>抗干扰更强</b>：风突然吹过来，陀螺仪立刻感知角速度变化，内环在 3ms 内修正，外环都来不及反应。<br>' +
+        '<b>调试更方便</b>：先调内环（把角速度稳住了），再调外环（角度跟准了），两步独立，互不干扰。<br>' +
+        '<b>安全性好</b>：外环的输出被限制在安全范围内，不会出现"指令太大导致失控"。' +
+      '</div>' +
+
+      '<h3>七、源代码</h3>' +
+      '<div class="code-block">' + h(m.code) + '</div>' +
+
+      '<button class="back-btn" onclick="showProgramFlow()" style="margin-top:20px;">← 返回流程图</button>' +
+    '</div>';
+  },
+
+  'prog_motor': () => {
+    const m = programModules.find(x => x.id === 'prog_motor');
+    const h = (s) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<div class="prog-detail">' +
+      '<button class="back-btn" onclick="showProgramFlow()">← 返回流程图</button>' +
+      '<h2>电机输出 — PWM 动力分配</h2>' +
+      '<p class="subtitle">X型四轴布局，PID修正量按矩阵分配到4个电机</p>' +
+
+      '<h3>一、X 型四轴布局</h3>' +
+      '<p>四个电机按 X 型排列，机头方向为电机 2、3 之间：</p>' +
+      '<div style="text-align:center;margin:12px 0;">' +
+        '<svg viewBox="0 0 220 240" width="200" height="220" xmlns="http://www.w3.org/2000/svg">' +
+          '<!-- 机头箭头 -->' +
+          '<polygon points="110,10 100,30 120,30" fill="var(--text2)"/>' +
+          '<text x="110" y="8" text-anchor="middle" font-size="10" fill="var(--text2)">机头</text>' +
+          '<!-- 机尾 -->' +
+          '<text x="110" y="238" text-anchor="middle" font-size="10" fill="var(--text2)">机尾</text>' +
+          '<!-- 框架线条 -->' +
+          '<line x1="60" y1="60" x2="160" y2="180" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="6,3"/>' +
+          '<line x1="160" y1="60" x2="60" y2="180" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="6,3"/>' +
+          '<!-- 中心圆 -->' +
+          '<circle cx="110" cy="120" r="10" fill="none" stroke="var(--text3)" stroke-width="1"/>' +
+          '<circle cx="110" cy="120" r="3" fill="var(--text3)"/>' +
+          '<!-- M1 右前 -->' +
+          '<circle cx="160" cy="60" r="20" fill="var(--bg3)" stroke="#ffa657" stroke-width="2"/>' +
+          '<text x="160" y="56" text-anchor="middle" font-size="11" fill="#ffa657" font-weight="bold">M1</text>' +
+          '<text x="160" y="70" text-anchor="middle" font-size="9" fill="var(--text2)">右前</text>' +
+          '<!-- M2 右后 -->' +
+          '<circle cx="160" cy="180" r="20" fill="var(--bg3)" stroke="#ffa657" stroke-width="2"/>' +
+          '<text x="160" y="176" text-anchor="middle" font-size="11" fill="#ffa657" font-weight="bold">M2</text>' +
+          '<text x="160" y="190" text-anchor="middle" font-size="9" fill="var(--text2)">右后</text>' +
+          '<!-- M4 左后 -->' +
+          '<circle cx="60" cy="180" r="20" fill="var(--bg3)" stroke="#ffa657" stroke-width="2"/>' +
+          '<text x="60" y="176" text-anchor="middle" font-size="11" fill="#ffa657" font-weight="bold">M4</text>' +
+          '<text x="60" y="190" text-anchor="middle" font-size="9" fill="var(--text2)">左后</text>' +
+          '<!-- M3 左前 -->' +
+          '<circle cx="60" cy="60" r="20" fill="var(--bg3)" stroke="#ffa657" stroke-width="2"/>' +
+          '<text x="60" y="56" text-anchor="middle" font-size="11" fill="#ffa657" font-weight="bold">M3</text>' +
+          '<text x="60" y="70" text-anchor="middle" font-size="9" fill="var(--text2)">左前</text>' +
+          '<!-- 旋转方向箭头 -->' +
+          '<path d="M170,50 A25,25 0 0,1 150,40" fill="none" stroke="var(--accent)" stroke-width="1" marker-end="url(#arrowBlue)"/>' +
+          '<path d="M50,50 A25,25 0 0,0 70,40" fill="none" stroke="#f85149" stroke-width="1" marker-end="url(#arrowRed)"/>' +
+          '<path d="M170,190 A25,25 0 0,0 150,200" fill="none" stroke="#f85149" stroke-width="1" marker-end="url(#arrowRed)"/>' +
+          '<path d="M50,190 A25,25 0 0,1 70,200" fill="none" stroke="var(--accent)" stroke-width="1" marker-end="url(#arrowBlue)"/>' +
+          '<defs>' +
+            '<marker id="arrowBlue" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="4" markerHeight="4" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)"/></marker>' +
+            '<marker id="arrowRed" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="4" markerHeight="4" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f85149"/></marker>' +
+          '</defs>' +
+        '</svg>' +
+        '<p style="font-size:0.8rem;color:var(--text2);margin-top:6px;">X型四轴布局 · 蓝色箭头=逆时针 · 红色箭头=顺时针</p>' +
+      '</div>' +
+
+      '<h3>二、动力分配矩阵</h3>' +
+      '<p>PID 控制器输出的是三轴修正量，需要按以下规则分配到 4 个电机：</p>' +
+      '<table class="data-table">' +
+        '<tr><th>电机</th><th>基准油门</th><th>Roll 修正</th><th>Pitch 修正</th><th>Yaw 修正</th></tr>' +
+        '<tr><td style="color:#ffa657">M1（右前）</td><td>temp</td><td style="color:#3fb950">+pidRateX</td><td style="color:#f85149">-pidRateY</td><td style="color:var(--accent)">-pidRateZ</td></tr>' +
+        '<tr><td style="color:#ffa657">M2（右后）</td><td>temp</td><td style="color:#3fb950">+pidRateX</td><td style="color:#f85149">+pidRateY</td><td style="color:var(--accent)">+pidRateZ</td></tr>' +
+        '<tr><td style="color:#ffa657">M3（左后）</td><td>temp</td><td style="color:#3fb950">-pidRateX</td><td style="color:#f85149">+pidRateY</td><td style="color:var(--accent)">-pidRateZ</td></tr>' +
+        '<tr><td style="color:#ffa657">M4（左前）</td><td>temp</td><td style="color:#3fb950">-pidRateX</td><td style="color:#f85149">-pidRateY</td><td style="color:var(--accent)">+pidRateZ</td></tr>' +
+      '</table>' +
+
+      '<h3>三、各轴的物理效果</h3>' +
+      '<div class="highlight-box">' +
+        '<b>Roll（横滚）</b>：pidRateX &gt; 0 → 右侧 M1/M2 加速，左侧 M3/M4 减速 → 飞机向右倾斜<br>' +
+        '<b>Pitch（俯仰）</b>：pidRateY &gt; 0 → 后方 M2/M3 加速，前方 M4/M1 减速 → 飞机向后倾斜<br>' +
+        '<b>Yaw（偏航）</b>：pidRateZ &gt; 0 → 对角 M2/M4 加速，M1/M3 减速 → 飞机顺时针旋转' +
+      '</div>' +
+
+      '<h3>四、油门来源</h3>' +
+      '<p>基准油门 <b>temp</b> 有两种来源：</p>' +
+      '<ul>' +
+        '<li><b>手动模式</b>：temp = 遥控油门值 - 1000（范围 0~1000）</li>' +
+        '<li><b>定高模式</b>：temp = 高度PID输出（自动维持高度）</li>' +
+        '<li>油门低于 1020（约 2%）时自动切断输出，防止误触</li>' +
+      '</ul>' +
+
+      '<h3>五、状态机</h3>' +
+      '<div class="data-diagram">' +
+        'WAITING_1（电机=0，等待解锁）<br>' +
+        '    │ 解锁<br>' +
+        '    ▼<br>' +
+        'WAITING_2（等待油门>1100）<br>' +
+        '    │ 油门推过1100<br>' +
+        '    ▼<br>' +
+        'PROCESS_31（正常输出）<br>' +
+        '    │ 紧急信号<br>' +
+        '    ▼<br>' +
+        'EXIT_255（电机=0，回到等待）' +
+      '</div>' +
+
+      '<h3>六、PWM 输出</h3>' +
+      '<p>最终 PWM 值直接写入 TIM2 的比较寄存器：</p>' +
+      '<div class="formula">TIM2-&gt;CCR1~4 = LIMIT(MOTOR1~4, 0, 1000)</div>' +
+      '<p>TIM2 的 4 路 PWM 输出到 2302 NMOS 管的栅极，控制电机转速。PWM 值 0 = 停转，1000 = 满载。</p>' +
+
+      '<h3>七、源代码</h3>' +
+      '<div class="code-block">' + h(m.code) + '</div>' +
+
+      '<button class="back-btn" onclick="showProgramFlow()" style="margin-top:20px;">← 返回流程图</button>' +
+    '</div>';
+  },
+
+  'prog_rc': () => {
+    const m = programModules.find(x => x.id === 'prog_rc');
+    const h = (s) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<div class="prog-detail">' +
+      '<button class="back-btn" onclick="showProgramFlow()">← 返回流程图</button>' +
+      '<h2>遥控接收 — NRF24L01 数据解析与解锁</h2>' +
+      '<p class="subtitle">2.4G 无线传输，32 字节数据包校验，摇杆解锁状态机</p>' +
+
+      '<h3>一、通信流程</h3>' +
+      '<div class="data-diagram">' +
+        '遥控器 ──2.4G RF──→ NRF24L01 ──SPI──→ STM32<br>' +
+        '    │<br>' +
+        '    ▼<br>' +
+        '32 字节数据包（每 3ms 接收一次）<br>' +
+        '    │<br>' +
+        '    ▼ 帧头 + 校验和验证<br>' +
+        '8 通道解析（Roll/Pitch/Thr/Yaw + AUX1~4）<br>' +
+        '    │<br>' +
+        '    ▼ 遥控值 → 控制量<br>' +
+        'pidRoll.desired / pidPitch.desired / pidYaw.desired<br>' +
+        '    │<br>' +
+        '    ▼ 解锁判断（remote_unlock）<br>' +
+        'ALL_flag.unlock = 1（允许飞行）' +
+      '</div>' +
+
+      '<h3>二、数据包格式（32 字节）</h3>' +
+      '<table class="data-table">' +
+        '<tr><th>字节</th><th>0</th><th>1</th><th>2~3</th><th>4~5</th><th>6~7</th><th>8~9</th><th>10~11</th><th>12~13</th><th>...</th><th>31</th></tr>' +
+        '<tr><td>含义</td><td>0xAA</td><td>0xAF</td><td>—</td><td>Roll</td><td>Pitch</td><td>Thr</td><td>Yaw</td><td>AUX1</td><td>AUX2~4</td><td>校验和</td></tr>' +
+      '</table>' +
+      '<p>每个通道 2 字节（uint16），范围 1000~2000，中位值 1500。</p>' +
+
+      '<h3>三、摇杆映射</h3>' +
+      '<table class="data-table">' +
+        '<tr><th>摇杆通道</th><th>控制目标</th><th>转换公式</th></tr>' +
+        '<tr><td>Roll（横滚）</td><td>目标横滚角</td><td>-(roll-1500) × 0.04 = 约 ±20°</td></tr>' +
+        '<tr><td>Pitch（俯仰）</td><td>目标俯仰角</td><td>-(pitch-1500) × 0.04 = 约 ±20°</td></tr>' +
+        '<tr><td>Yaw（偏航）</td><td>偏航角速度</td><td>推左 +0.45°/次，推右 -0.45°/次</td></tr>' +
+        '<tr><td>Thr（油门）</td><td>电机基准功率</td><td>× 0.9 限幅到 90%</td></tr>' +
+        '<tr><td>AUX1</td><td>定高开关</td><td>&gt;1700 开启 / &lt;1700 关闭</td></tr>' +
+      '</table>' +
+
+      '<h3>四、解锁状态机（remote_unlock）</h3>' +
+      '<div class="data-diagram">' +
+        'WAITING_1 → WAITING_2 → WAITING_3 → WAITING_4 → PROCESS_31<br>' +
+        '  油门&lt;1100   油门&gt;1600   油门&lt;1100   解锁=1     飞行中<br>' +
+        '                                                     │<br>' +
+        '                             油门+偏航走左下 ───→ EXIT_255<br>' +
+        '                              或 6秒油门归零      上锁=0<br>' +
+        '                                                     │<br>' +
+        '                                                     ▼<br>' +
+        '                                              回到 WAITING_1' +
+      '</div>' +
+
+      '<div class="highlight-box">' +
+        '<b>解锁操作（三步）：</b><br>' +
+        '① 油门拉到最低（&lt;1100）<br>' +
+        '② 油门推到最高（&gt;1600）<br>' +
+        '③ 油门拉回最低（&lt;1100）→ 解锁成功，LED 常亮<br><br>' +
+        '<b>上锁操作：</b><br>' +
+        '油门最低（&lt;1200）+ 偏航最左（&lt;1200）→ 立即上锁<br>' +
+        '或油门持续最低 6 秒 → 自动上锁<br>' +
+        '或遥控器断电 3 秒 → 信号丢失保护自动上锁' +
+      '</div>' +
+
+      '<h3>五、安全保护</h3>' +
+      '<ul>' +
+        '<li><b>信号丢失保护</b> — 超过 3 秒（约 2000 次循环）无信号，自动上锁并重连 NRF24L01</li>' +
+        '<li><b>油门保护</b> — 手动模式油门 < 1020 时电机不转</li>' +
+        '<li><b>数据校验</b> — 帧头 + 校验和双重验证，错误数据直接丢弃</li>' +
+      '</ul>' +
+
+      '<h3>六、源代码</h3>' +
+      '<div class="code-block">' + h(m.code) + '</div>' +
+
+      '<button class="back-btn" onclick="showProgramFlow()" style="margin-top:20px;">← 返回流程图</button>' +
+    '</div>';
+  }
+};
+
+function escapeHTML(str) {
+  return str.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ============ Code examples ============
+
+const droneExamples = [
+  { id: 'ex_led', name: 'LED', desc: 'GPIO 输出控制 LED 闪烁', code: `// LED 闪烁示例
+#include "stm32f10x.h"
+
+void LED_Init(void) {
+    GPIO_InitTypeDef gpio;
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
+    gpio.GPIO_Pin = GPIO_Pin_13;
+    gpio.GPIO_Mode = GPIO_Mode_Out_PP;
+    gpio.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOC, &gpio);
+}
+
+void delay_ms(uint32_t ms) {
+    for(uint32_t i=0; i<ms*8000; i++);
+}
+
+int main(void) {
+    LED_Init();
+    while(1) {
+        GPIO_SetBits(GPIOC, GPIO_Pin_13);   // LED 亮
+        delay_ms(500);
+        GPIO_ResetBits(GPIOC, GPIO_Pin_13); // LED 灭
+        delay_ms(500);
+    }
+}` },
+  { id: 'ex_uart', name: '串口', desc: 'USART1 配置与 printf 输出', code: `// 串口打印示例
+#include "stm32f10x.h"
+#include <stdio.h>
+
+void UART_Init(void) {
+    GPIO_InitTypeDef gpio;
+    USART_InitTypeDef usart;
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1|RCC_APB2Periph_GPIOA, ENABLE);
+    // TX: PA9
+    gpio.GPIO_Pin = GPIO_Pin_9; gpio.GPIO_Mode = GPIO_Mode_AF_PP;
+    gpio.GPIO_Speed = GPIO_Speed_50MHz; GPIO_Init(GPIOA, &gpio);
+    // RX: PA10
+    gpio.GPIO_Pin = GPIO_Pin_10; gpio.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+    GPIO_Init(GPIOA, &gpio);
+
+    usart.USART_BaudRate = 115200;
+    usart.USART_WordLength = USART_WordLength_8b;
+    usart.USART_StopBits = USART_StopBits_1;
+    usart.USART_Parity = USART_Parity_No;
+    usart.USART_Mode = USART_Mode_Rx|USART_Mode_Tx;
+    USART_Init(USART1, &usart);
+    USART_Cmd(USART1, ENABLE);
+}
+
+int fputc(int ch, FILE *f) {
+    USART_SendData(USART1, (uint8_t)ch);
+    while(USART_GetFlagStatus(USART1, USART_FLAG_TC)==RESET);
+    return ch;
+}
+
+int main(void) {
+    UART_Init();
+    printf("Hello STM32!\\r\\n");
+    while(1);
+}` },
+  { id: 'ex_nrf', name: 'NRF24L01', desc: '2.4G 无线模块数据收发', code: `// NRF24L01 发送示例
+#include "nrf24l01.h"
+
+uint8_t tx_buf[32] = {0xAA,0xAF};  // 帧头
+
+void NRF_Send_Test(void) {
+    // 填充测试数据
+    for(int i=2; i<31; i++) tx_buf[i] = i;
+    // 计算校验和
+    tx_buf[31] = 0;
+    for(int i=0; i<31; i++) tx_buf[31] += tx_buf[i];
+    // 发送
+    NRF24L01_TxPacket(tx_buf);
+}
+
+int main(void) {
+    NRF24L01_Init(40, TX);  // 频道40, 发送模式
+    while(1) {
+        NRF_Send_Test();
+        delay_ms(10);  // 每10ms发送一次
+    }
+}` },
+  { id: 'ex_mpu', name: 'MPU6050读取', desc: 'I2C 读取六轴传感器数据', code: `// MPU6050 读取示例
+#include "mpu6050.h"
+#include <stdio.h>
+
+int main(void) {
+    IIC_Init();
+    if(MpuInit() != SUCCESS) {
+        printf("MPU6050 init failed!\\r\\n");
+        while(1);
+    }
+
+    while(1) {
+        MpuGetData();  // 读取6轴数据+滤波
+        printf("Acc: X=%d Y=%d Z=%d  Gyro: X=%d Y=%d Z=%d\\r\\n",
+            pMpu[0], pMpu[1], pMpu[2],
+            pMpu[3], pMpu[4], pMpu[5]);
+        delay_ms(10);
+    }
+}` },
+  { id: 'ex_adc', name: 'ADC', desc: 'DMA+ADC 多通道电压采集', code: `// ADC + DMA 多通道采集示例
+#include "stm32f10x.h"
+
+uint16_t ADC_Value[4];  // 4通道DMA缓冲区
+
+void ADC_DMA_Init(void) {
+    // 配置ADC1 + DMA1_Channel1
+    RCC_ADCCLKConfig(RCC_PCLK2_Div6);  // ADC时钟12MHz
+    ADC_InitTypeDef adc; /* ... 初始化代码 ... */
+    DMA_InitTypeDef dma; /* ... DMA配置 ... */
+    ADC_SoftwareStartConvCmd(ADC1, ENABLE);  // 启动连续转换
+}
+
+int main(void) {
+    ADC_DMA_Init();
+    while(1) {
+        // DMA自动更新 ADC_Value[]
+        printf("CH0=%d CH1=%d CH2=%d CH3=%d\\r\\n",
+            ADC_Value[0], ADC_Value[1],
+            ADC_Value[2], ADC_Value[3]);
+        delay_ms(100);
+    }
+}` },
+];
+
+const remoteExamples = [
+  { id: 'rme_uart', name: '串口', desc: 'USART1 收发配置', code: `// 遥控器串口示例
+void Uart1_Init(uint32_t baud) {
+    GPIO_InitTypeDef gpio;
+    USART_InitTypeDef usart;
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1|RCC_APB2Periph_GPIOA, ENABLE);
+    gpio.GPIO_Pin = GPIO_Pin_9; gpio.GPIO_Mode = GPIO_Mode_AF_PP;
+    GPIO_Init(GPIOA, &gpio);
+    usart.USART_BaudRate = baud;
+    usart.USART_WordLength = USART_WordLength_8b;
+    usart.USART_StopBits = USART_StopBits_1;
+    usart.USART_Parity = USART_Parity_No;
+    usart.USART_Mode = USART_Mode_Rx|USART_Mode_Tx;
+    USART_Init(USART1, &usart);
+    USART_Cmd(USART1, ENABLE);
+}` },
+  { id: 'rme_key', name: '按键', desc: 'GPIO 按键扫描与去抖', code: `// 按键扫描示例
+void key_scan(void) {
+    static uint8_t status = 0;
+    switch(status) {
+    case 0:  // 等待按下
+        if(!(GPIOA->IDR & GPIO_Pin_6)) status = 1;
+        break;
+    case 1:  // 等待释放（去抖）
+        if(GPIOA->IDR & GPIO_Pin_6) status = 2;
+        break;
+    case 2:  // 按键处理
+        LED_Toggle();  // 切换LED状态
+        status = 0;
+        break;
+    }
+}` },
+  { id: 'rme_nrf', name: 'NRF24L01', desc: '遥控器无线发送配置', code: `// NRF24L01 发送配置
+void NRF24L01_Init(uint8_t ch, uint8_t mode) {
+    SPI2_Init();  // SPI初始化
+    NRF24L01_CE = 0;
+    NRF24L01_Write_Reg(WRITE_REG+EN_AA, 0x01);     // 自动应答
+    NRF24L01_Write_Reg(WRITE_REG+SETUP_RETR, 0x1A);// 自动重传
+    NRF24L01_Write_Reg(WRITE_REG+RF_CH, ch);       // 频道
+    NRF24L01_Write_Reg(WRITE_REG+RF_SETUP, 0x07);  // 2Mbps
+    if(mode == TX) NRF24L01_TX_Mode();
+    NRF24L01_CE = 1;
+}` },
+  { id: 'rme_eeprom', name: 'AT24C02', desc: 'I2C EEPROM 读写操作', code: `// AT24C02 读写示例
+void write_AT24C02(uint8_t addr, int16_t data) {
+    IIC_Start();
+    IIC_Send_Byte(0xA0);        // 设备地址（写）
+    IIC_Send_Byte(addr);        // 存储地址
+    IIC_Send_Byte(data >> 8);   // 高字节
+    IIC_Send_Byte(data & 0xFF); // 低字节
+    IIC_Stop();
+    delay_ms(5);  // 等待写入完成
+}
+
+int16_t read_AT24C02(uint8_t addr) {
+    int16_t val;
+    IIC_Start();
+    IIC_Send_Byte(0xA0);  // 设备地址（写）
+    IIC_Send_Byte(addr);  // 存储地址
+    IIC_Start();
+    IIC_Send_Byte(0xA1);  // 设备地址（读）
+    val = IIC_Read_Byte() << 8;
+    val |= IIC_Read_Byte();
+    IIC_Stop();
+    return val;
+}` },
+];
+
+// Build example sidebar entries
+const navExample = document.getElementById('navExample');
+droneExamples.forEach(ex => {
+  const btn = document.createElement('button');
+  btn.className = 'comp-btn';
+  btn.innerHTML = '<span class="dot" style="background:#3fb950"></span>' + ex.name;
+  btn.onclick = () => showExample(ex);
+  navExample.appendChild(btn);
+  ex._btn = btn;
+});
+
+const navRemoteExample = document.getElementById('navRemoteExample');
+remoteExamples.forEach(ex => {
+  const btn = document.createElement('button');
+  btn.className = 'comp-btn';
+  btn.innerHTML = '<span class="dot" style="background:#3fb950"></span>' + ex.name;
+  btn.onclick = () => showExample(ex);
+  navRemoteExample.appendChild(btn);
+  ex._btn = btn;
+});
+
+function showExample(ex) {
+  document.getElementById('hardwareView').classList.remove('hidden');
+  document.getElementById('programView').classList.add('hidden');
+  document.getElementById('serialView').classList.add('hidden');
+  panel.innerHTML = '<h3>📝 ' + ex.name + ' 例程</h3>' +
+    '<p class="desc">' + ex.desc + '</p>' +
+    '<div class="info-section">' +
+    '<div class="info-section-header" onclick="this.parentElement.classList.toggle(\'collapsed\')">源代码 <span class="arr">▼</span></div>' +
+    '<div class="info-section-body"><div class="code-block">' + ex.code.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div></div>' +
+    '</div>';
+}
+
+// ============ Remote program modules ============
+
+const remoteProgModules = [
+  {
+    id: 'rm_prog_main', name: '程序框架',
+    icon: 'var(--accent)', isKey: false, order: 1,
+    desc: '主循环 + 4级任务调度器，500Hz/100Hz/25Hz/4Hz 分频执行。',
+    code: `// main.c — 遥控器主程序
+int main(void)
+{
+    BSP_Int();  // 底层硬件初始化
+    while(1)
+    {
+        Uart_Check();  // 检查串口接收数据
+
+        if(Count_2ms >= 1)   // 500Hz: 摇杆读取+滤波
+        { Count_2ms = 0; Task_500HZ(); }
+
+        if(Count_10ms >= 5)  // 100Hz: 发送遥控数据
+        { Count_10ms = 0; Task_100HZ(); }
+
+        if(Count_40ms >= 20) // 25Hz: LED+地面站通信
+        { Count_40ms = 0; Task_25HZ(); }
+
+        if(Count_250ms >= 125)// 4Hz: 遥测数据轮询
+        { Count_250ms = 0; Task_4HZ(); }
+    }
+}`,
+    explanation: '<p>主程序结构简洁，基于 TIM3 定时器产生的 2ms 计数值驱动 4 级任务：</p><ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;"><li><b>500Hz</b> — 最高优先级：NRF24L01 连接检测 + 摇杆数据滤波</li><li><b>100Hz</b> — 发送遥控信号给飞行器</li><li><b>25Hz</b> — LED 指示灯 + 发送数据给地面站</li><li><b>4Hz</b> — 低优先级：遥测数据轮询发送</li></ul>',
+  },
+  {
+    id: 'rm_prog_adc', name: '摇杆读取',
+    icon: '#f0883e', isKey: true, order: 2,
+    desc: 'DMA+ADC 读取4路摇杆电位器，经一阶低通滤波后映射到遥控通道值。',
+    code: `// Rc_Filter() — 摇杆ADC滤波 + 通道映射
+void Rc_Filter(_st_Rc *Rc, _st_Rc *Filter_Rc)
+{
+    static float Rc_Buff[4];
+    static float Rc_Buff_B[4];
+    const float filter = 0.2f;  // 滤波系数
+
+    Rc_Buff[0] = Get_Adc_Average(ADC_Channel_0, 10);
+    Rc_Buff[1] = Get_Adc_Average(ADC_Channel_1, 10);
+    Rc_Buff[2] = Get_Adc_Average(ADC_Channel_2, 10);
+    Rc_Buff[3] = Get_Adc_Average(ADC_Channel_3, 10);
+
+    for(int i=0; i<4; i++)
+    {
+        // 一阶低通滤波
+        Rc_Buff_B[i] = Rc_Buff_B[i]*(1-filter) + Rc_Buff[i]*filter;
+        // 映射到 1000~2000 (PWM范围)
+        Filter_Rc->channel[i] = (int16_t)Rc_Buff_B[i];
+    }
+}`,
+    explanation: '<p>4 路 ADC 通道通过 DMA 采集摇杆电位器电压，经软件滤波和线性映射后得到 1000~2000 范围的通道值：</p><ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;"><li><b>DMA+ADC</b> — 硬件自动采集，不占用 CPU</li><li><b>一阶低通滤波</b> — filter=0.2，去除手抖和电噪声</li><li><b>4 通道</b> — CH0=油门, CH1=偏航, CH2=俯仰, CH3=横滚</li></ul>',
+  },
+  {
+    id: 'rm_prog_proto', name: '通信协议',
+    icon: '#d2a8ff', isKey: true, order: 3,
+    desc: 'MSP 协议打包遥控数据，通过 NRF24L01 无线发送给飞行器。',
+    code: `// Print_MSP_RC() — MSP协议发送遥控数据
+void Print_MSP_RC(char command)
+{
+    uint8_t data[22];
+    uint8_t checksum = 0;
+
+    data[0] = 0xAA;  // 帧头1
+    data[1] = 0xAF;  // 帧头2
+    data[2] = 0;     // 保留
+    data[3] = command;  // '<' 发送给飞控, '>' 发送给地面站
+
+    // 8通道数据 (每个2字节)
+    for(int i=0; i<8; i++)
+    {
+        data[4+i*2]   = (Filter_Rc.channel[i] >> 8) & 0xFF;
+        data[5+i*2]   = Filter_Rc.channel[i] & 0xFF;
+    }
+
+    // 校验和
+    for(int i=0; i<20; i++) checksum ^= data[i];
+    data[20] = checksum;
+
+    NRF24L01_TxPacket(data);  // 无线发送
+}`,
+    explanation: '<p>采用 MSP (Multiwii Serial Protocol) 协议，将 8 通道数据打包为 22 字节数据包：</p><ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;"><li><b>帧头</b> — 0xAA + 0xAF 标识数据包开始</li><li><b>方向</b> — &lt; 发给飞控 / &gt; 发给地面站</li><li><b>8 通道</b> — Roll/Pitch/Thr/Yaw + 4个AUX</li><li><b>校验和</b> — XOR 校验，确保数据完整</li><li><b>发送频率</b> — 100Hz（每10ms发送一次）</li></ul>',
+  },
+  {
+    id: 'rm_prog_oled', name: 'OLED显示',
+    icon: '#3fb950', isKey: false, order: 4,
+    desc: 'Nokia 5110 液晶屏驱动，显示电压、信号强度、飞行模式等状态信息。',
+    code: `// LCD5110 显示驱动
+void LCD_Print(uint8_t x, uint8_t y, const char *str)
+{
+    LCD_Set_XY(x, y);  // 设置显示位置
+    while(*str) LCD_Write_Char(*str++, 1);  // 逐字写入
+}
+
+// 显示飞行数据
+void Display_Flight_Data(void)
+{
+    LCD_Clear();  // 清屏
+    LCD_Print(0, 0, "RagingFire RC");
+    LCD_Print(0, 1, "V:"); LCD_Print_Num(voltage);
+    LCD_Print(0, 2, "CH1-4:");
+    LCD_Print(0, 3, "Mode:");
+    LCD_Print(0, 4, "Signal:");
+    LCD_Print(0, 5, "Time:");
+}`,
+    explanation: '<p>Nokia 5110 单色液晶屏（84×48像素），SPI 接口驱动：</p><ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;"><li><b>显示内容</b> — 电压、通道值、飞行模式、信号强度、飞行时间</li><li><b>SPI 通信</b> — 4 线 SPI（SCK/MOSI/CS/DC），高速刷新</li><li><b>字体库</b> — 内置 6×8、8×16、16×16 三种字体</li></ul>',
+  },
+  {
+    id: 'rm_prog_nrf', name: 'NRF24L01发送',
+    icon: '#e3b341', isKey: true, order: 5,
+    desc: 'ADC 采集摇杆 → IIR 滤波 → MSP 协议打包 → NRF24L01 无线发送，100Hz 循环。',
+    code: `// NRF_SEND() — 32字节数据打包 + NRF24L01发送
+uint8_t tx_data[32] = {0xAA, 0xAF, 0x03, 27};  // 帧头固定
+
+void NRF_SEND(void)
+{
+    // 8通道数据填入 (每通道2字节，大端序)
+    for(uint8_t i=4; i<26; i+=2)
+    {
+        tx_data[i]   = *((uint8_t*)&Remote + i-3);  // 高字节
+        tx_data[i+1] = *((uint8_t*)&Remote + i-4);  // 低字节
+    }
+    // XOR 校验和
+    tx_data[31] = 0;
+    for(uint8_t i=0; i<31; i++)
+        tx_data[31] += tx_data[i];
+
+    NRF24L01_TxPacket(tx_data);  // 无线发送
+}
+
+// RC_Analy() — ADC采集 + IIR滤波 + 限幅
+void RC_Analy(void)  // 每10ms调用
+{
+    // DMA自动采集的ADC值 → 1000~2000范围
+    Remote.thr  = 1000 + 0.25*ADC_ConvertedValue[0] + offset.thr;
+    Remote.yaw  = 1000 + 0.25*ADC_ConvertedValue[1] + offset.yaw;
+    Remote.roll = 1000 + 0.25*ADC_ConvertedValue[2] + offset.roll;
+    Remote.pitch= 1000 + 0.25*ADC_ConvertedValue[3] + offset.pitch;
+
+    // IIR一阶滤波: 新值×0.25 + 旧值×0.75
+    last_thr = Remote.thr = Remote.thr*0.25 + 0.75*last_thr;
+    // ... pitch, yaw, roll 同理
+
+    // 限幅 1000~2000
+    Remote.thr = LIMIT(Remote.thr, 1000, 2000);
+    // ... 其他通道同理
+
+    key();       // 扫描按键
+    NRF_SEND();  // 打包发送
+}`,
+    explanation: '<p>遥控器核心数据流：DMA 采集 ADC → IIR 滤波 → MSP 协议打包 → NRF24L01 发送：</p><ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;"><li><b>DMA+ADC</b> — 硬件自动采集 4 路电位器，CPU 零开销</li><li><b>IIR 滤波</b> — 新值 25% + 旧值 75%，平滑手抖</li><li><b>32 字节帧</b> — 0xAA+0xAF 帧头 + 8 通道 × 2 字节 + XOR 校验</li><li><b>100Hz 发送</b> — 每 10ms 无线发射一次</li></ul>',
+  },
+  {
+    id: 'rm_prog_tasks', name: '任务调度',
+    icon: '#ffa657', isKey: false, order: 6,
+    desc: 'TIM3 中断驱动 4 级任务分频器，确保各任务按固定频率执行。',
+    code: `// BSP_Init() — 硬件初始化 + TIM3启动
+void BSP_Int(void)
+{
+    LED_Init();          // LED 初始化
+    KEY_Init();          // 按键初始化
+    Uart1_Init(115200);  // 串口初始化
+    Timer3_Init(500);    // TIM3 500Hz 中断
+    Nvic_Init();         // 中断优先级配置
+    ADC1_Init();         // ADC+DMA 初始化
+    SPI2_Init();         // SPI2 初始化
+    NRF24L01_Init(40, TX);  // NRF24L01 频道40, 发送模式
+}
+
+// TIM3 中断：产生2ms计数基准
+void TIM3_IRQHandler(void)
+{
+    if(TIM_GetITStatus(TIM3, TIM_IT_Update))
+    {
+        Count_2ms++;     // 500Hz 计数器
+        Count_10ms++;    // 100Hz 分频
+        Count_40ms++;    // 25Hz 分频
+        Count_250ms++;   // 4Hz 分频
+        TIM_ClearITPendingBit(TIM3, TIM_IT_Update);
+    }
+}`,
+    explanation: '<p>TIM3 定时器以 500Hz 频率产生中断，在中断中累加 4 个计数器，主循环根据计数值触发不同频率的任务：</p><ul style="font-size:0.78rem;line-height:1.8;padding-left:16px;"><li><b>500Hz</b> — 摇杆采样+滤波（延迟最小）</li><li><b>100Hz</b> — 遥控数据发送（每10ms）</li><li><b>25Hz</b> — LED + 地面站数据</li><li><b>4Hz</b> — 遥测数据轮询</li></ul>',
+  },
+];
+
+// Build remote program sidebar
+const navRemoteProg = document.getElementById('navRemoteProg');
+remoteProgModules.forEach(m => {
+  const btn = document.createElement('button');
+  btn.className = 'prog-btn';
+  btn.innerHTML = `<span class="dot" style="background:${m.icon}"></span>${m.name}`;
+  btn.onclick = () => {
+    document.getElementById('hardwareView').classList.add('hidden');
+    document.getElementById('programView').classList.remove('hidden');
+    document.getElementById('adjustBar').classList.add('hidden');
+    selectRemoteProgModule(m.id);
+  };
+  navRemoteProg.appendChild(btn);
+  m._pbtn = btn;
+});
+
+function selectRemoteProgModule(id) {
+  const m = remoteProgModules.find(x => x.id === id);
+  if (!m) return;
+  // Update sidebar
+  [...programModules, ...remoteProgModules].forEach(x => {
+    if (x._pbtn) x._pbtn.classList.toggle('active', x.id === id);
+  });
+  // Rebuild flow diagram for remote
+  buildFlowDiagram(remoteProgModules);
+  document.getElementById('progFlowView').classList.remove('hidden');
+  document.getElementById('progDetailView').classList.add('hidden');
+  // Show detail if exists
+  if (remoteProgDetailPages[id]) {
+    document.getElementById('progFlowView').classList.add('hidden');
+    document.getElementById('progDetailView').classList.remove('hidden');
+    document.getElementById('progDetailView').innerHTML = remoteProgDetailPages[id]();
+  }
+  panel.innerHTML = buildPanelContent(m);
+}
+
+// Extract flow diagram builder as reusable function
+function buildFlowDiagram(modules) {
+  const isRemote = modules === remoteProgModules;
+  const flowDiag = document.getElementById('flowDiagram');
+  let html = `<div class="flow-label">◉ ${isRemote ? '遥控器' : '无人机'}程序流程图 ◉</div><div class="flow-row">`;
+  const row1 = modules.filter(m => m.order <= 3);
+  row1.forEach((m, i) => {
+    const func = isRemote ? 'selectRemoteProgModule' : 'selectProgramModule';
+    html += `<div class="flow-node${m.isKey?' key':''}" id="fn_${m.id}" onclick="${func}('${m.id}')"><div class="fn-title">${m.name}</div><div class="fn-sub">${m.desc.slice(0,20)}...</div></div>`;
+    if (i < row1.length-1) html += '<div class="flow-arrow">→</div>';
+  });
+  html += '</div><div class="flow-arrow-down">↓</div><div class="flow-row">';
+  const row2 = modules.filter(m => m.order >= 4);
+  row2.forEach((m, i) => {
+    const func = isRemote ? 'selectRemoteProgModule' : 'selectProgramModule';
+    html += `<div class="flow-node${m.isKey?' key':''}" id="fn_${m.id}" onclick="${func}('${m.id}')"><div class="fn-title">${m.name}</div><div class="fn-sub">${m.desc.slice(0,20)}...</div></div>`;
+    if (i < row2.length-1) html += '<div class="flow-arrow">→</div>';
+  });
+  html += '</div>';
+  flowDiag.innerHTML = html;
+}
+
+// When entering drone program, rebuild drone flow
+const origSelectProgModule = selectProgramModule;
+selectProgramModule = function(id) {
+  buildFlowDiagram(programModules);
+  origSelectProgModule(id);
+};
+
+// Remote program detail pages
+const remoteProgDetailPages = {
+  'rm_prog_adc': () => {
+    const m = remoteProgModules.find(x => x.id === 'rm_prog_adc');
+    const h = (s) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<div class="prog-detail">' +
+      '<button class="back-btn" onclick="document.getElementById(\'progFlowView\').classList.remove(\'hidden\');document.getElementById(\'progDetailView\').classList.add(\'hidden\');">← 返回</button>' +
+      '<h2>摇杆读取 — ADC + DMA + 滤波</h2>' +
+      '<p class="subtitle">4 路电位器电压采集，软件滤波后映射为遥控通道值</p>' +
+      '<h3>一、硬件采集</h3>' +
+      '<p>每个摇杆包含两个电位器（X轴和Y轴），两个摇杆共 4 路模拟信号。STM32 通过 <b>DMA + ADC</b> 自动采集：</p>' +
+      '<ul><li><b>CH0</b> — 左摇杆 Y（油门）</li><li><b>CH1</b> — 左摇杆 X（偏航）</li><li><b>CH2</b> — 右摇杆 Y（俯仰）</li><li><b>CH3</b> — 右摇杆 X（横滚）</li></ul>' +
+      '<p>每通道连续采样 10 次取平均值，消除瞬时噪声。</p>' +
+      '<h3>二、一阶低通滤波</h3>' +
+      '<div class="formula">本次输出 = 上次输出 × 0.8 + 新读数值 × 0.2</div>' +
+      '<p>新值只占 20% 权重，平滑手抖和电噪声，滤波后数据更稳定。</p>' +
+      '<h3>三、数据流</h3>' +
+      '<div class="data-diagram">摇杆电位器 → ADC → DMA → 10次均值 → 低通滤波 → 通道值(1000~2000) → 协议打包 → NRF24L01 发送</div>' +
+      '<h3>四、源代码</h3>' +
+      '<div class="code-block">' + h(m.code) + '</div>' +
+      '<button class="back-btn" onclick="document.getElementById(\'progFlowView\').classList.remove(\'hidden\');document.getElementById(\'progDetailView\').classList.add(\'hidden\');">← 返回</button>' +
+      '</div>';
+  },
+  'rm_prog_proto': () => {
+    const m = remoteProgModules.find(x => x.id === 'rm_prog_proto');
+    const h = (s) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<div class="prog-detail">' +
+      '<button class="back-btn" onclick="document.getElementById(\'progFlowView\').classList.remove(\'hidden\');document.getElementById(\'progDetailView\').classList.add(\'hidden\');">← 返回</button>' +
+      '<h2>通信协议 — MSP 数据打包</h2>' +
+      '<p class="subtitle">将 8 通道遥控数据打包为 22 字节数据帧，100Hz 无线发送</p>' +
+      '<h3>一、数据帧格式（22 字节）</h3>' +
+      '<table class="data-table"><tr><th>字节</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4~19</th><th>20</th></tr>' +
+      '<tr><td>含义</td><td>0xAA</td><td>0xAF</td><td>保留</td><td>方向</td><td>8通道×2字节</td><td>校验和</td></tr></table>' +
+      '<h3>二、发送策略</h3>' +
+      '<div class="highlight-box"><b>100Hz 发送频率</b>：每 10ms 发送一次，兼顾实时性和无线带宽。<br><b>双向通信</b>：同时发送给飞控(&lt;)和地面站(&gt;)。<br><b>校验保护</b>：XOR 校验和，错误数据丢弃。</div>' +
+      '<h3>三、数据流</h3>' +
+      '<div class="data-diagram">滤波后通道值 → MSP 协议打包（帧头+数据+校验）→ NRF24L01_TxPacket() → 2.4G 无线发送 → 飞行器接收</div>' +
+      '<h3>四、源代码</h3>' +
+      '<div class="code-block">' + h(m.code) + '</div>' +
+      '<button class="back-btn" onclick="document.getElementById(\'progFlowView\').classList.remove(\'hidden\');document.getElementById(\'progDetailView\').classList.add(\'hidden\');">← 返回</button>' +
+      '</div>';
+  },
+
+  'rm_prog_nrf': () => {
+    const m = remoteProgModules.find(x => x.id === 'rm_prog_nrf');
+    const h = (s) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<div class="prog-detail">' +
+      '<button class="back-btn" onclick="document.getElementById(\'progFlowView\').classList.remove(\'hidden\');document.getElementById(\'progDetailView\').classList.add(\'hidden\');">← 返回</button>' +
+      '<h2>NRF24L01 发送 — 完整数据流</h2>' +
+      '<p class="subtitle">从摇杆电位器到无线发射的完整链路：ADC采集 → IIR滤波 → 协议打包 → NRF24L01发送</p>' +
+
+      '<h3>一、整体数据流</h3>' +
+      '<div class="data-diagram">' +
+        '左/右摇杆电位器 (4路)<br>' +
+        '    │ DMA 自动采集<br>' +
+        '    ▼<br>' +
+        'ADC_ConvertedValue[0~3]  (12位, 0~4095)<br>' +
+        '    │ ×0.25 + 1000 + offset<br>' +
+        '    ▼<br>' +
+        '1000~2000 范围原始值<br>' +
+        '    │ IIR 滤波 (新25%+旧75%)<br>' +
+        '    ▼<br>' +
+        '平滑后的通道值 (Remote.thr/yaw/roll/pitch)<br>' +
+        '    │ MSP 协议打包<br>' +
+        '    ▼<br>' +
+        '32 字节数据帧 (帧头+8通道+校验)<br>' +
+        '    │ NRF24L01_TxPacket()<br>' +
+        '    ▼<br>' +
+        '2.4GHz 无线电波 ────→ 飞行器接收<br>' +
+        '    │<br>' +
+        '    └──→ 地面站接收 (25Hz, 方向位不同)' +
+      '</div>' +
+
+      '<h3>二、RC_Analy() 详解</h3>' +
+      '<p>每 10ms 调用一次（100Hz），完成 ADC 读取 + 滤波 + 发送：</p>' +
+      '<table class="data-table">' +
+        '<tr><th>步骤</th><th>操作</th><th>说明</th></tr>' +
+        '<tr><td>1</td><td>ADC值→PWM范围</td><td>ADC_ConvertedValue × 0.25 + 1000 + 校准偏移</td></tr>' +
+        '<tr><td>2</td><td>IIR 低通滤波</td><td>out = in×0.25 + last×0.75，平滑手抖</td></tr>' +
+        '<tr><td>3</td><td>限幅保护</td><td>LIMIT(value, 1000, 2000)</td></tr>' +
+        '<tr><td>4</td><td>按键扫描</td><td>AUX开关 + 微调按钮</td></tr>' +
+        '<tr><td>5</td><td>NRF_SEND()</td><td>打包32字节 + 无线发射</td></tr>' +
+      '</table>' +
+
+      '<h3>三、NRF_SEND() 数据帧</h3>' +
+      '<table class="data-table">' +
+        '<tr><th>字节</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4~19</th><th>20~31</th></tr>' +
+        '<tr><td>值</td><td>0xAA</td><td>0xAF</td><td>0x03</td><td>27</td><td>8ch×2B</td><td>XOR校验</td></tr>' +
+      '</table>' +
+      '<p>帧头 0xAA+0xAF 标识开始，第三字节 0x03 为协议版本，第四字节 27 为数据长度。</p>' +
+
+      '<h3>四、校准偏移 (EEPROM)</h3>' +
+      '<p>每个摇杆电位器中位值有差异，通过 <b>AT24C02 EEPROM</b> 存储校准偏移值。遥控器上的方向按键可微调偏移（每次 ±5），自动写入 EEPROM 断电保存。</p>' +
+
+      '<h3>五、按键扫描 (key函数)</h3>' +
+      '<div class="data-diagram">' +
+        '等待300ms去抖<br>' +
+        '    ↓<br>' +
+        '检测按键释放<br>' +
+        '    ↓<br>' +
+        '识别按键：<br>' +
+        '  AUX1~4 → 通道值在 1000↔2000 之间切换<br>' +
+        '  方向键 → 微调校准偏移 ±5 → 写入AT24C02' +
+      '</div>' +
+
+      '<h3>六、源代码</h3>' +
+      '<div class="code-block">' + h(m.code) + '</div>' +
+      '<button class="back-btn" onclick="document.getElementById(\'progFlowView\').classList.remove(\'hidden\');document.getElementById(\'progDetailView\').classList.add(\'hidden\');">← 返回</button>' +
+      '</div>';
+  },
+};
+
+// ============ Remote control hardware ============
+
+const remoteComponents = [
+  {
+    id: 'rm_stm32', name: 'STM32F103C8T6',
+    desc: '主控芯片，处理摇杆输入、OLED显示、无线通信。',
+    color: 'var(--accent)', schematic: 'remote-stm32.png',
+    x: 45.5, y: 33, w: 9, h: 10.5,
+  },
+  {
+    id: 'rm_left_stick', name: '左摇杆',
+    desc: '油门 + 偏航控制。上下=油门，左右=偏航。',
+    color: '#f0883e', schematic: 'remote-stick-left.png',
+    x: 12.5, y: 29.5, w: 14.5, h: 17,
+  },
+  {
+    id: 'rm_right_stick', name: '右摇杆',
+    desc: '俯仰 + 横滚控制。上下=俯仰，左右=横滚。',
+    color: '#f0883e', schematic: 'remote-stick-right.png',
+    x: 72.5, y: 29.5, w: 14.5, h: 17.5,
+  },
+  {
+    id: 'rm_oled', name: 'OLED 显示屏',
+    desc: '显示飞行数据（电压、高度、信号强度等）。',
+    color: '#d2a8ff', schematic: 'OLED.png',
+    x: 44.5, y: 24, w: 11, h: 4,
+  },
+  {
+    id: 'rm_nrf', name: 'NRF24L01',
+    desc: '2.4G 无线发射模块，将遥控数据发送给飞行器。',
+    color: '#e3b341', schematic: 'remote-nrf24l01.png',
+    x: 45, y: 0.5, w: 10, h: 22.5,
+  },
+  {
+    id: 'rm_buzzer', name: '蜂鸣器',
+    desc: '声音提示，用于低电量报警、解锁/上锁提示。',
+    color: '#ff7b72', schematic: 'remote-buzzer.png',
+    x: 46, y: 54, w: 14, h: 10.5,
+  },
+  {
+    id: 'rm_eeprom', name: 'AT24C02',
+    desc: 'EEPROM 存储芯片，保存遥控器设置参数（I2C接口）。',
+    color: '#a371f7', schematic: 'remote-at24c02.png',
+    x: 37, y: 30, w: 8, h: 6,
+  },
+  {
+    id: 'rm_uart', name: '串口',
+    desc: 'USART 接口，用于固件升级和调试输出。',
+    color: '#56d364', schematic: 'remote-uart.png',
+    x: 32, y: 19.5, w: 9, h: 6,
+  },
+  {
+    id: 'rm_swd', name: '下载口',
+    desc: 'SWD 调试/烧录接口，连接 ST-Link 下载程序。',
+    color: '#39d2c0', schematic: 'remote-download-port.png',
+    x: 59, y: 19.5, w: 9, h: 6,
+  },
+  {
+    id: 'rm_power', name: '电源模块',
+    desc: '电池供电及稳压电路，为遥控器提供稳定电压。',
+    color: '#f85149', schematic: 'remote-power.png',
+    x: 85.5, y: 49.5, w: 12.5, h: 12,
+  },
+  {
+    id: 'rm_reset', name: 'RESET',
+    desc: '复位电路，上电自动复位 + 按键复位。',
+    color: '#ff7b72', schematic: 'remote-reset.png',
+    x: 37.5, y: 39, w: 4.5, h: 10.5,
+  },
+];
+
+let currentProduct = 'drone';  // 'drone' | 'remote'
+const droneArea = document.querySelector('.pcb-base');
+
+// Build remote sidebar entries
+const navRemoteHw = document.getElementById('navRemoteHw');
+remoteComponents.forEach(comp => {
+  const btn = document.createElement('button');
+  btn.className = 'comp-btn';
+  btn.innerHTML = `<span class="dot" style="background:${comp.color}"></span>${comp.name}`;
+  btn.onclick = () => {
+    switchProduct('remote');
+    document.getElementById('hardwareView').classList.remove('hidden');
+    document.getElementById('programView').classList.add('hidden');
+    selectComponent(comp.id);
+  };
+  navRemoteHw.appendChild(btn);
+  comp._btn = btn;
+});
+
+function switchProduct(type) {
+  if (currentProduct === type && document.querySelectorAll('.marker').length > 0) return;
+  currentProduct = type;
+
+  // Clear old markers
+  document.querySelectorAll('.marker').forEach(m => m.remove());
+  const allComps = [...components, ...remoteComponents];
+  allComps.forEach(c => {
+    c._marker = null;
+    c._glow = null;
+  });
+
+  if (type === 'remote') {
+    droneArea.src = 'remote.png';
+    // Build markers for remote components
+    remoteComponents.forEach(comp => {
+      buildMarker(comp);
+    });
+    document.getElementById('navHardware').classList.add('hidden');
+  } else {
+    droneArea.src = '3D_PCB3_2026-06-09.png';
+    // Rebuild drone markers
+    components.forEach(comp => {
+      buildMarker(comp);
+    });
+    document.getElementById('navHardware').classList.remove('hidden');
+  }
+}
+
+function buildMarker(comp) {
+  const marker = document.createElement('div');
+  marker.className = 'marker';
+  const rot = comp.rotate ? `transform:rotate(${comp.rotate}deg);` : '';
+  marker.style.cssText = `left:${comp.x}%;top:${comp.y}%;width:${comp.w}%;height:${comp.h}%;${rot}`;
+  marker.innerHTML = `<span class="label" style="background:${comp.color}">${comp.name}</span>`;
+  marker.onclick = (e) => { e.stopPropagation(); selectComponent(comp.id); };
+  marker.onmouseenter = () => { highlightLinks(comp, true); document.body.style.cursor = 'pointer'; };
+  marker.onmouseleave = () => { if (activeCompId !== comp.id) highlightLinks(comp, false); document.body.style.cursor = ''; };
+  pcbInner.appendChild(marker);
+  comp._marker = marker;
+}
+
+// Hardware sidebar click → switch to correct PCB
+document.querySelectorAll('.nav-sub[onclick*="hardware"]').forEach(el => {
+  const orig = el.onclick;
+  el.onclick = function(e) {
+    document.getElementById('hardwareView').classList.remove('hidden');
+    document.getElementById('programView').classList.add('hidden');
+    // Determine which product based on parent menu
+    if (el.parentElement.id === 'navRemote') {
+      switchProduct('remote');
+    } else {
+      switchProduct('drone');
+    }
+    if (orig) orig.call(this, e);
+  };
+});
+
+// Product tab switching
+window.switchTab = function(tab) {
+  document.getElementById('tabDrone').classList.toggle('active', tab === 'drone');
+  document.getElementById('tabRemote').classList.toggle('active', tab === 'remote');
+  if (tab === 'drone') {
+    switchProduct('drone');
+    document.getElementById('hardwareView').classList.remove('hidden');
+    document.getElementById('programView').classList.add('hidden');
+    // Expand drone menu
+    document.getElementById('navDrone').classList.remove('hidden');
+    document.getElementById('arrowDrone').textContent = '▼';
+  } else {
+    switchProduct('remote');
+    document.getElementById('hardwareView').classList.remove('hidden');
+    document.getElementById('programView').classList.add('hidden');
+    document.getElementById('navDrone').classList.add('hidden');
+    document.getElementById('arrowDrone').textContent = '▶';
+    document.getElementById('navRemote').classList.remove('hidden');
+    document.getElementById('arrowRemote').textContent = '▼';
+    document.getElementById('navHardware').classList.add('hidden');
+    document.getElementById('arrowHardware').textContent = '▶';
+  }
+};
+
+// ============ Serial terminal ============
+
+let serialPort = null;
+let serialReader = null;
+let serialPaused = false;
+let serialBuffer = '';
+let serialHistoryPorts = [];
+
+async function refreshSerialPorts() {
+  try { serialHistoryPorts = await navigator.serial.getPorts(); } catch(e) {}
+  const sel = document.getElementById('serialPortSelect');
+  sel.innerHTML = '<option value="">选择端口（首次需点连接按钮）</option>';
+  serialHistoryPorts.forEach((p, i) => {
+    try {
+      const info = p.getInfo();
+      const name = info.usbProductName || ('USB ' + info.usbVendorId?.toString(16));
+      sel.innerHTML += '<option value="' + i + '">' + name + '</option>';
+    } catch(e) {}
+  });
+}
+
+window.openSerialTerminal = function() {
+  // Disconnect PID serial if active
+  if (pidPort) { if (pidReader) { pidReader.cancel(); pidReader = null; } pidPort.close().catch(()=>{}); pidPort = null; }
+  document.getElementById('hardwareView').classList.add('hidden');
+  document.getElementById('programView').classList.add('hidden');
+  document.getElementById('pidView').classList.add('hidden');
+  document.getElementById('serialView').classList.remove('hidden');
+  document.getElementById('adjustBar').classList.add('hidden');
+  refreshSerialPorts();
+};
+
+window.onPortSelect = async function() {
+  const sel = document.getElementById('serialPortSelect');
+  const idx = parseInt(sel.value);
+  if (isNaN(idx)) return;
+  try {
+    if (serialPort) { await serialPort.close(); serialPort = null; }
+    serialPort = serialHistoryPorts[idx];
+    const baud = parseInt(document.getElementById('serialBaud').value);
+    await serialPort.open({ baudRate: baud });
+    document.getElementById('serialConnect').textContent = '断开';
+    document.getElementById('serialStatus').textContent = '已连接 ' + baud + 'bps';
+    document.getElementById('serialStatus').style.color = '#3fb950';
+    serialPaused = false; document.getElementById('serialPause').textContent = '暂停';
+    readSerialLoop();
+  } catch(e) { console.error(e); }
+};
+
+window.toggleSerial = async function() {
+  if (serialPort) {
+    if (serialReader) { serialReader.cancel(); serialReader = null; }
+    await serialPort.close();
+    serialPort = null;
+    document.getElementById('serialConnect').textContent = '连接串口';
+    document.getElementById('serialStatus').textContent = '已断开';
+    document.getElementById('serialStatus').style.color = 'var(--text2)';
+    return;
+  }
+  if (!('serial' in navigator)) {
+    const s = document.getElementById('serialStatus');
+    s.textContent = '当前浏览器不支持串口，请用电脑版 Chrome 或 Edge 打开本页';
+    s.style.color = '#f85149';
+    return;
+  }
+  try {
+    const port = await navigator.serial.requestPort();
+    const baud = parseInt(document.getElementById('serialBaud').value);
+    await port.open({ baudRate: baud });
+    serialPort = port;
+    document.getElementById('serialConnect').textContent = '断开';
+    document.getElementById('serialStatus').textContent = '已连接 ' + baud + 'bps';
+    document.getElementById('serialStatus').style.color = '#3fb950';
+    serialPaused = false;
+    document.getElementById('serialPause').textContent = '暂停';
+    readSerialLoop();
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      document.getElementById('serialStatus').textContent = '错误: ' + e.message;
+      document.getElementById('serialStatus').style.color = '#f85149';
+    }
+  }
+};
+
+async function readSerialLoop() {
+  const output = document.getElementById('serialOutput');
+  if (!serialPort || !serialPort.readable) return;
+  if (!serialBuffer) output.innerHTML = '';
+  const decoder = new TextDecoder();
+  try {
+    while (serialPort.readable) {
+      serialReader = serialPort.readable.getReader();
+      try {
+        while (true) {
+          const { value, done } = await serialReader.read();
+          if (done) break;
+          if (serialPaused) continue;
+          serialBuffer += decoder.decode(value, { stream: true });
+          if (serialBuffer.length > 50000) serialBuffer = serialBuffer.slice(-40000);
+          output.textContent = serialBuffer;
+          output.scrollTop = output.scrollHeight;
+        }
+      } finally { serialReader.releaseLock(); }
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError' && e.name !== 'NetworkError') console.error(e);
+  }
+}
+
+window.clearSerial = function() {
+  serialBuffer = '';
+  document.getElementById('serialOutput').innerHTML = '<span style=\"color:var(--text3);\">等待数据...</span>';
+};
+
+window.pauseSerial = function() {
+  serialPaused = !serialPaused;
+  document.getElementById('serialPause').textContent = serialPaused ? '继续' : '暂停';
+};
+
+// ============ PID Debug ============
+
+let pidPort = null, pidReader = null, pidPaused = false, pidHistory = [];
+let pidHistoryPorts = [];
+const PID_MAX_POINTS = 500;
+
+async function refreshPIDPorts() {
+  try { pidHistoryPorts = await navigator.serial.getPorts(); } catch(e) {}
+  const sel = document.getElementById('pidPortSelect');
+  sel.innerHTML = '<option value="">选择端口（首次需点连接按钮）</option>';
+  pidHistoryPorts.forEach((p, i) => {
+    try {
+      const info = p.getInfo();
+      sel.innerHTML += '<option value="' + i + '">' + (info.usbProductName || ('USB ' + info.usbVendorId?.toString(16))) + '</option>';
+    } catch(e) {}
+  });
+}
+
+window.openPIDDebug = function() {
+  // Disconnect serial if active
+  if (serialPort) { if (serialReader) { serialReader.cancel(); serialReader = null; } serialPort.close(); serialPort = null; document.getElementById('serialStatus').textContent = '已断开'; }
+  document.getElementById('hardwareView').classList.add('hidden');
+  document.getElementById('programView').classList.add('hidden');
+  document.getElementById('serialView').classList.add('hidden');
+  document.getElementById('pidView').classList.remove('hidden');
+  document.getElementById('adjustBar').classList.add('hidden');
+  refreshPIDPorts();
+  initPIDCanvas();
+};
+
+window.onPIDPortSelect = async function() {
+  const idx = parseInt(document.getElementById('pidPortSelect').value);
+  if (isNaN(idx)) return;
+  try {
+    if (pidPort) { await pidPort.close(); pidPort = null; }
+    pidPort = pidHistoryPorts[idx];
+    const baud = parseInt(document.getElementById('pidBaud').value);
+    await pidPort.open({ baudRate: baud });
+    document.getElementById('pidConnect').textContent = '断开';
+    document.getElementById('pidStatus').textContent = '已连接 ' + baud + 'bps';
+    document.getElementById('pidStatus').style.color = '#3fb950';
+    pidPaused = false; document.getElementById('pidPause').textContent = '暂停';
+    readPIDLoop();
+  } catch(e) { console.error(e); }
+};
+
+window.togglePIDSerial = async function() {
+  if (pidPort) {
+    if (pidReader) { pidReader.cancel(); pidReader = null; }
+    await pidPort.close(); pidPort = null;
+    document.getElementById('pidConnect').textContent = '连接串口';
+    document.getElementById('pidStatus').textContent = '已断开';
+    document.getElementById('pidStatus').style.color = 'var(--text2)';
+    return;
+  }
+  if (!('serial' in navigator)) {
+    const s = document.getElementById('pidStatus');
+    s.textContent = '当前浏览器不支持串口，请用电脑版 Chrome 或 Edge 打开本页';
+    s.style.color = '#f85149';
+    return;
+  }
+  try {
+    const port = await navigator.serial.requestPort();
+    const baud = parseInt(document.getElementById('pidBaud').value);
+    await port.open({ baudRate: baud });
+    pidPort = port;
+    document.getElementById('pidConnect').textContent = '断开';
+    document.getElementById('pidStatus').textContent = '已连接 ' + baud + 'bps';
+    document.getElementById('pidStatus').style.color = '#3fb950';
+    pidPaused = false; document.getElementById('pidPause').textContent = '暂停';
+    refreshPIDPorts();
+    readPIDLoop();
+  } catch(e) {
+    if (e.name !== 'AbortError') {
+      document.getElementById('pidStatus').textContent = '错误: ' + e.message;
+      document.getElementById('pidStatus').style.color = '#f85149';
+    }
+  }
+};
+
+async function readPIDLoop() {
+  const decoder = new TextDecoder();
+  let leftover = '';
+  try {
+    while (pidPort && pidPort.readable) {
+      pidReader = pidPort.readable.getReader();
+      try {
+        while (true) {
+          const { value, done } = await pidReader.read();
+          if (done) break;
+          if (pidPaused) continue;
+          const text = decoder.decode(value, { stream: true });
+          leftover += text;
+          const lines = leftover.split(/\r?\n/);
+          leftover = lines.pop() || '';
+          for (const line of lines) {
+            const parts = line.trim().split(/[,\\t ]+/);
+            if (parts.length >= 2) {
+              const desired = parseFloat(parts[0]);
+              const actual = parseFloat(parts[1]);
+              if (!isNaN(desired) && !isNaN(actual)) {
+                pidHistory.push({ d: desired, a: actual });
+                if (pidHistory.length > PID_MAX_POINTS) pidHistory.shift();
+              }
+            }
+          }
+          drawPIDCanvas();
+        }
+      } finally { pidReader.releaseLock(); }
+    }
+  } catch(e) {
+    if (e.name !== 'AbortError' && e.name !== 'NetworkError') console.error(e);
+  }
+}
+
+let pidCtx = null, pidW = 0, pidH = 0;
+let pidZoomX = 1, pidZoomY = 1, pidPanX = 0, pidPanY = 0;
+let pidDragging = false, pidDragStart = {x:0,y:0}, pidPanStart = {x:0,y:0};
+
+function initPIDCanvas() {
+  const canvas = document.getElementById('pidCanvas');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * (window.devicePixelRatio || 1);
+  canvas.height = rect.height * (window.devicePixelRatio || 1);
+  pidW = canvas.width; pidH = canvas.height;
+  pidCtx = canvas.getContext('2d');
+  pidZoomX = 1; pidZoomY = 1; pidPanX = 0; pidPanY = 0;
+  pidHistory = [];
+  document.getElementById('pidPlaceholder').style.display = 'block';
+}
+
+// Wheel zoom on PID canvas
+(function() {
+  const el = document.getElementById('pidCanvas').parentElement;
+  el.addEventListener('wheel', (e) => {
+    if (!pidCtx || pidHistory.length === 0) return;
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.2 : 0.8;
+    pidZoomX = Math.min(10, Math.max(0.2, pidZoomX * factor));
+    pidZoomY = Math.min(10, Math.max(0.2, pidZoomY * factor));
+    drawPIDCanvas();
+  }, { passive: false });
+
+  el.addEventListener('mousedown', (e) => {
+    pidDragging = true;
+    pidDragStart = { x: e.clientX, y: e.clientY };
+    pidPanStart = { x: pidPanX, y: pidPanY };
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!pidDragging) return;
+    pidPanX = pidPanStart.x + (e.clientX - pidDragStart.x);
+    pidPanY = pidPanStart.y - (e.clientY - pidDragStart.y);
+    drawPIDCanvas();
+  });
+  window.addEventListener('mouseup', () => { pidDragging = false; });
+})();
+
+function roundToNice(v) { const p = Math.pow(10, Math.floor(Math.log10(Math.abs(v)||1))); return Math.round(v/p)*p; }
+
+function drawPIDCanvas() {
+  if (!pidCtx || pidHistory.length === 0) return;
+  document.getElementById('pidPlaceholder').style.display = 'none';
+  const ctx = pidCtx, w = pidW, h = pidH;
+  const margin = { top: 20, right: 20, bottom: 30, left: 55 };
+  const pw = w - margin.left - margin.right;
+  const ph = h - margin.top - margin.bottom;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Visible data
+  const totalPts = pidHistory.length;
+  const visPts = Math.max(10, Math.floor(totalPts / pidZoomX));
+  const startIdx = Math.max(0, totalPts - visPts - Math.floor(pidPanX / 10));
+  const visibleData = pidHistory.slice(startIdx);
+  const count = visibleData.length;
+  if (count < 2) return;
+
+  // Y range
+  let yMin = Infinity, yMax = -Infinity;
+  for (const p of visibleData) { yMin = Math.min(yMin, p.d, p.a); yMax = Math.max(yMax, p.d, p.a); }
+  const yRange = Math.max(yMax - yMin, 0.1);
+  const yCenter = (yMin + yMax) / 2;
+  const halfRange = yRange / (2 * pidZoomY);
+  const yLo = yCenter - halfRange + pidPanY;
+  const yHi = yCenter + halfRange + pidPanY;
+
+  const toX = (i) => margin.left + pw * i / (count - 1);
+  const toY = (v) => margin.top + ph * (1 - (v - yLo) / Math.max(yHi - yLo, 0.001));
+
+  // Y axis grid + labels
+  const yTickCount = 5;
+  for (let i = 0; i <= yTickCount; i++) {
+    const val = yLo + (yHi - yLo) * i / yTickCount;
+    const y = toY(val);
+    ctx.strokeStyle = i === 0 ? '#30363d' : '#1a1e2a'; ctx.lineWidth = i === 0 ? 2 : 1;
+    ctx.beginPath(); ctx.moveTo(margin.left, y); ctx.lineTo(w - margin.right, y); ctx.stroke();
+    ctx.fillStyle = '#6e7681'; ctx.font = '11px monospace'; ctx.textAlign = 'right';
+    ctx.fillText(val.toFixed(0), margin.left - 6, y + 4);
+  }
+
+  // X axis
+  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(margin.left, toY(yLo)); ctx.lineTo(w - margin.right, toY(yLo)); ctx.stroke();
+
+  // Axes frame
+  ctx.strokeStyle = '#484f58'; ctx.lineWidth = 2;
+  ctx.strokeRect(margin.left, margin.top, pw, ph);
+
+  // Zero line (if visible)
+  if (yLo <= 0 && yHi >= 0) {
+    const zeroY = toY(0);
+    ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(margin.left, zeroY); ctx.lineTo(w - margin.right, zeroY); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Desired line (blue)
+  ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2; ctx.beginPath();
+  ctx.moveTo(toX(0), toY(visibleData[0].d));
+  for (let i = 1; i < count; i++) ctx.lineTo(toX(i), toY(visibleData[i].d));
+  ctx.stroke();
+
+  // Actual line (orange)
+  ctx.strokeStyle = '#f0883e'; ctx.lineWidth = 2; ctx.beginPath();
+  ctx.moveTo(toX(0), toY(visibleData[0].a));
+  for (let i = 1; i < count; i++) ctx.lineTo(toX(i), toY(visibleData[i].a));
+  ctx.stroke();
+
+  // Axis labels
+  ctx.fillStyle = '#8b949e'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center'; ctx.fillText('时间 →', margin.left + pw/2, h - 4);
+  ctx.save(); ctx.translate(10, margin.top + ph/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('数值', 0, 0); ctx.restore();
+
+  // Zoom indicator
+  ctx.fillStyle = '#484f58'; ctx.font = '10px monospace'; ctx.textAlign = 'right';
+  ctx.fillText('×' + pidZoomX.toFixed(1) + ' 滚轮缩放 | 拖拽平移', w - margin.right, margin.top - 6);
+}
+
+window.addEventListener('resize', () => { if (pidCtx) initPIDCanvas(); });
+
+window.clearPID = function() { pidHistory = []; pidZoomX = 1; pidZoomY = 1; pidPanX = 0; pidPanY = 0; initPIDCanvas(); drawPIDCanvas(); };
+window.pausePID = function() {
+  pidPaused = !pidPaused;
+  document.getElementById('pidPause').textContent = pidPaused ? '继续' : '暂停';
+};
+
+// Keyboard shortcut
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ============ 浏览器兼容性检测（Web Serial）============
+// 只有 Chrome / Edge / Opera 等 Chromium 内核浏览器支持 Web Serial。
+// 不支持的浏览器上，按钮置灰并在面板顶部给出中文提示，避免用户点到英文报错。
+(function () {
+  if ('serial' in navigator) return;
+  var tip = '当前浏览器不支持串口调试，请用电脑版 Chrome 或 Edge 打开本页';
+  ['serialConnect', 'pidConnect'].forEach(function (id) {
+    var b = document.getElementById(id);
+    if (!b) return;
+    b.disabled = true;
+    b.style.opacity = '0.45';
+    b.style.cursor = 'not-allowed';
+    b.title = tip;
+    var view = b.closest('div[id$="View"]') || b.parentNode;
+    if (view && !view.querySelector('.serial-unsupported')) {
+      var bar = document.createElement('div');
+      bar.className = 'serial-unsupported';
+      bar.textContent = '⚠ ' + tip;
+      bar.style.cssText = 'margin-bottom:10px;padding:8px 12px;border-radius:6px;'
+        + 'background:rgba(248,81,73,.12);border:1px solid #f85149;'
+        + 'color:#f85149;font-size:.78rem;line-height:1.5;';
+      view.insertBefore(bar, view.firstChild);
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
