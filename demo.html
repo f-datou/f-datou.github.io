@@ -396,24 +396,118 @@
     
     <!-- Serial terminal view -->
     <div id="serialView" class="hidden" style="width:100%;height:100%;display:flex;flex-direction:column;padding:16px;">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-        <button id="serialConnect" onclick="toggleSerial()" style="background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600;">连接串口</button>
-        <select id="serialPortSelect" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:0.78rem;min-width:180px;" onchange="onPortSelect()">
-          <option value="">选择端口（首次需点连接按钮）</option>
+      <style>
+        .ser-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+        .ser-sel{background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:5px 8px;border-radius:6px;font-size:.78rem;cursor:pointer;outline:none;}
+        .ser-sel:focus{border-color:var(--accent);}
+        .ser-btn{background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.78rem;}
+        .ser-btn:hover{border-color:var(--accent);color:var(--accent);}
+        .ser-btn.primary{background:var(--accent);color:#fff;border:none;padding:7px 20px;font-size:.85rem;font-weight:600;}
+        .ser-chk{display:inline-flex;align-items:center;gap:4px;font-size:.76rem;color:var(--text2);cursor:pointer;user-select:none;white-space:nowrap;}
+        .ser-chk input{cursor:pointer;accent-color:var(--accent);margin:0;}
+        .ser-lbl{font-size:.76rem;color:var(--text2);white-space:nowrap;}
+        .ser-num{background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:5px 6px;border-radius:6px;font-size:.78rem;width:70px;outline:none;}
+        .ser-inp{background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:7px 9px;border-radius:6px;font-size:.8rem;outline:none;width:100%;}
+        .ser-inp:focus{border-color:var(--accent);}
+        .ser-stat{font-size:.74rem;color:var(--text3);font-family:Consolas,'Courier New',monospace;}
+        .ser-led{display:inline-flex;align-items:center;gap:3px;font-size:.7rem;color:var(--text3);font-family:Consolas,monospace;}
+        .ser-dot{width:7px;height:7px;border-radius:50%;background:#30363d;display:inline-block;}
+        .ser-dot.on{background:#3fb950;box-shadow:0 0 4px #3fb950;}
+        .ser-quick{background:var(--bg3);color:var(--text2);border:1px dashed var(--border);padding:4px 10px;border-radius:12px;cursor:pointer;font-size:.74rem;font-family:Consolas,monospace;}
+        .ser-quick:hover{border-style:solid;border-color:var(--accent);color:var(--accent);}
+        .ser-del{color:var(--text3);cursor:pointer;font-size:.72rem;margin-left:4px;}
+        .ser-del:hover{color:#f85149;}
+        #serialOutput .ts{color:#484f58;}
+        #serialOutput .rx{color:#3fb950;}
+        #serialOutput .tx{color:#d29922;}
+        #serialOutput .sys{color:#58a6ff;font-style:italic;}
+        #serialOutput .err{color:#f85149;}
+        #serialOutput.hexmode{color:#79c0ff;}
+      </style>
+
+      <!-- 第 1 行：串口参数 -->
+      <div class="ser-row">
+        <span class="ser-lbl">端口</span>
+        <select id="serialPortSelect" class="ser-sel" style="min-width:168px;" onchange="onPortSelect()">
+          <option value="">未选择（首次点"连接串口"授权）</option>
         </select>
-        <button onclick="refreshSerialPorts()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:6px;cursor:pointer;font-size:0.72rem;" title="刷新端口列表">↻</button>
-        <select id="serialBaud" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:0.82rem;">
+        <button class="ser-btn" onclick="refreshSerialPorts()" title="刷新已授权端口" style="padding:5px 9px;">↻</button>
+        <span class="ser-lbl">波特率</span>
+        <select id="serialBaud" class="ser-sel" onchange="onSerialParamChange()">
+          <option value=1200>1200</option><option value=2400>2400</option><option value=4800>4800</option>
           <option value=9600>9600</option><option value=19200>19200</option><option value=38400>38400</option>
-          <option value=57600>57600</option><option value=115200 selected>115200</option><option value=256000>256000</option>
+          <option value=57600>57600</option><option value=115200 selected>115200</option>
+          <option value=230400>230400</option><option value=460800>460800</option><option value=921600>921600</option>
         </select>
-        <span id="serialStatus" style="font-size:0.78rem;color:var(--text2);">未连接</span>
+        <span class="ser-lbl">数据位</span>
+        <select id="serialDataBits" class="ser-sel" onchange="onSerialParamChange()"><option value=8 selected>8</option><option value=7>7</option></select>
+        <span class="ser-lbl">校验</span>
+        <select id="serialParity" class="ser-sel" onchange="onSerialParamChange()"><option value="none" selected>无</option><option value="even">偶</option><option value="odd">奇</option></select>
+        <span class="ser-lbl">停止位</span>
+        <select id="serialStopBits" class="ser-sel" onchange="onSerialParamChange()"><option value=1 selected>1</option><option value=2>2</option></select>
+        <span class="ser-lbl">流控</span>
+        <select id="serialFlow" class="ser-sel" onchange="onSerialParamChange()"><option value="none" selected>无</option><option value="hardware">硬件</option></select>
+        <button id="serialConnect" class="ser-btn primary" onclick="toggleSerial()">连接串口</button>
+        <span id="serialStatus" class="ser-stat">未连接</span>
+      </div>
+
+      <!-- 第 2 行：显示选项与统计 -->
+      <div class="ser-row">
+        <span class="ser-lbl">显示</span>
+        <select id="serialViewMode" class="ser-sel" onchange="onSerialViewModeChange()">
+          <option value="text" selected>字符</option><option value="hex">HEX</option>
+        </select>
+        <span class="ser-lbl">接收编码</span>
+        <select id="serialEncoding" class="ser-sel" onchange="onSerialEncodingChange()">
+          <option value="utf-8" selected>UTF-8</option><option value="gbk">GBK</option><option value="big5">BIG5</option>
+        </select>
+        <label class="ser-chk" title="每行开头显示接收时间"><input type="checkbox" id="serOptTimestamp" checked>时间戳</label>
+        <label class="ser-chk" title="关闭后可自由向上翻看历史，不会被新数据顶走"><input type="checkbox" id="serOptAutoscroll" checked>自动滚底</label>
+        <label class="ser-chk" title="发送的内容也显示在接收区"><input type="checkbox" id="serOptEcho" checked>回显发送</label>
         <span style="flex:1"></span>
-        <button onclick="clearSerial()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.78rem;">清空</button>
-        <button id="serialPause" onclick="pauseSerial()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.78rem;">暂停</button>
+        <span class="ser-stat" id="serialRxCount">RX 0 B</span>
+        <span class="ser-stat" id="serialTxCount">TX 0 B</span>
+        <button class="ser-btn" onclick="clearSerial()">清空</button>
+        <button id="serialPause" class="ser-btn" onclick="pauseSerial()">暂停</button>
+        <button class="ser-btn" onclick="saveSerialLog()" title="把接收到的原始数据存成 txt 文件">保存日志</button>
       </div>
-      <div id="serialOutput" style="flex:1;background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:14px;font-family:'Consolas','Courier New',monospace;font-size:0.8rem;color:#3fb950;overflow-y:auto;white-space:pre-wrap;word-break:break-all;">
-        <span style="color:var(--text3);">等待连接串口设备...</span>
+
+      <!-- 接收区 -->
+      <div id="serialOutput" style="flex:1;min-height:110px;background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'Consolas','Courier New',monospace;font-size:.8rem;line-height:1.45;color:#3fb950;overflow-y:auto;white-space:pre-wrap;word-break:break-all;">
+        <span class="sys">等待连接串口设备…（串口功能需电脑版 Chrome / Edge）</span>
       </div>
+
+      <!-- 第 3 行：硬件信号 -->
+      <div class="ser-row" style="margin-top:8px;">
+        <label class="ser-chk" title="数据终端就绪，部分开发板用它做复位/进 bootloader"><input type="checkbox" id="serOptDTR" onchange="applySerialSignals()">DTR</label>
+        <label class="ser-chk" title="请求发送"><input type="checkbox" id="serOptRTS" onchange="applySerialSignals()">RTS</label>
+        <button class="ser-btn" onclick="resetDevice()" title="把 DTR 拉低 100ms 再拉高，复位已连接的目标板">复位设备</button>
+        <span style="flex:1"></span>
+        <span class="ser-led"><i class="ser-dot" id="ledCTS"></i>CTS</span>
+        <span class="ser-led"><i class="ser-dot" id="ledDSR"></i>DSR</span>
+        <span class="ser-led"><i class="ser-dot" id="ledRI"></i>RI</span>
+        <span class="ser-led"><i class="ser-dot" id="ledDCD"></i>DCD</span>
+      </div>
+
+      <!-- 发送区 -->
+      <textarea id="serialSendInput" rows="2" class="ser-inp" style="resize:vertical;font-family:'Consolas','Courier New',monospace;"
+        placeholder="输入要发送的内容，回车直接发送（Shift+回车换行），↑ 键调出上一条"
+        onkeydown="onSerialSendKey(event)"></textarea>
+      <div class="ser-row" style="margin-top:8px;margin-bottom:6px;">
+        <button class="ser-btn" onclick="sendSerialData()" style="padding:6px 22px;font-weight:600;">发送</button>
+        <label class="ser-chk" title="按十六进制发送，如 A0 01 FF 或 A001FF"><input type="checkbox" id="serOptHexSend">HEX 发送</label>
+        <span class="ser-lbl">行尾</span>
+        <select id="serialEOL" class="ser-sel">
+          <option value="">不加</option><option value="\r\n" selected>\r\n</option><option value="\n">\n</option><option value="\r">\r</option>
+        </select>
+        <label class="ser-chk" title="按固定周期自动重复发送"><input type="checkbox" id="serOptTimer" onchange="restartSerialTimer()">定时</label>
+        <input type="number" id="serialTimerMs" class="ser-num" value="1000" min="20" step="100" onchange="restartSerialTimer()">
+        <span class="ser-lbl">ms</span>
+        <button class="ser-btn" onclick="clearSerialSend()">清空输入</button>
+        <span style="flex:1"></span>
+        <button class="ser-btn" onclick="addQuickCmd()" title="把输入框里的内容存成快捷按钮（保存在本机浏览器）">＋ 存为快捷</button>
+      </div>
+      <div class="ser-row" id="serialQuickCmds" style="margin-bottom:0;"></div>
     </div>
 
     <!-- PID debug view -->
@@ -2660,61 +2754,271 @@ window.switchTab = function(tab) {
 
 let serialPort = null;
 let serialReader = null;
+let serialWriter = null;
 let serialPaused = false;
-let serialBuffer = '';
 let serialHistoryPorts = [];
 
+// —— 接收缓冲与渲染节流 ——
+const SER_MAX_BYTES = 200000;   // 原始字节上限（保存日志用）
+const SER_MAX_LINES = 1500;     // 接收区保留行数
+let serRaw = [], serRawLen = 0;
+let serPending = [], serFlushTimer = null;
+let serDecoder = new TextDecoder('utf-8');
+let serRxBytes = 0, serTxBytes = 0;
+let serLineCount = 0, serLineStart = true, serHasContent = false;
+let serSignalTimer = null, serTimerId = null;
+let serSendHistory = [], serHistIdx = -1;
+let serQuickCmds = [];
+const SER_QUICK_KEY = 'feimaodatou.serialQuickCmds';
+const EOL_MAP = { '': '', '\\r\\n': '\r\n', '\\n': '\n', '\\r': '\r' };
+
+function serTime() {
+  const d = new Date(), p = (n, w) => String(n).padStart(w, '0');
+  return p(d.getHours(), 2) + ':' + p(d.getMinutes(), 2) + ':' + p(d.getSeconds(), 2) + '.' + p(d.getMilliseconds(), 3);
+}
+function serOut() { return document.getElementById('serialOutput'); }
+
+function serPush(kind, data) {
+  serPending.push({ kind: kind, data: data });
+  if (!serFlushTimer) serFlushTimer = setTimeout(serFlush, 60);
+}
+function serLog(kind, text) {
+  serPending.push({ kind: kind, text: text });
+  if (!serFlushTimer) serFlushTimer = setTimeout(serFlush, 0);
+}
+function serSys(t) { serLog('sys', t); }
+function serErr(t) { serLog('err', t); }
+
+function serAppendRaw(bytes) {
+  serRaw.push(bytes);
+  serRawLen += bytes.length;
+  while (serRawLen > SER_MAX_BYTES && serRaw.length > 1) serRawLen -= serRaw.shift().length;
+}
+
+function serBuildText(frag, str, cls) {
+  const ts = document.getElementById('serOptTimestamp').checked;
+  const parts = String(str).split('\n');
+  for (let i = 0; i < parts.length; i++) {
+    const last = (i === parts.length - 1);
+    if (serLineStart && ts) {
+      const s = document.createElement('span');
+      s.className = 'ts';
+      s.textContent = '[' + serTime() + '] ';
+      frag.appendChild(s);
+    }
+    if (parts[i]) {
+      const s = document.createElement('span');
+      s.className = cls;
+      s.textContent = parts[i];
+      frag.appendChild(s);
+    }
+    if (!last) {
+      frag.appendChild(document.createTextNode('\n'));
+      serLineCount++; serLineStart = true;
+    } else {
+      serLineStart = false;
+    }
+  }
+}
+
+function serBuildHex(frag, bytes, cls) {
+  const ts = document.getElementById('serOptTimestamp').checked;
+  const PER = 16;
+  for (let off = 0; off < bytes.length; off += PER) {
+    const sl = bytes.subarray(off, Math.min(off + PER, bytes.length));
+    let hex = '', ascii = '';
+    for (let i = 0; i < sl.length; i++) {
+      hex += sl[i].toString(16).toUpperCase().padStart(2, '0') + ' ';
+      ascii += (sl[i] >= 0x20 && sl[i] <= 0x7e) ? String.fromCharCode(sl[i]) : '.';
+    }
+    while (hex.length < PER * 3) hex += '   ';
+    if (serLineStart && ts) {
+      const s = document.createElement('span');
+      s.className = 'ts';
+      s.textContent = '[' + serTime() + '] ';
+      frag.appendChild(s);
+    }
+    const s2 = document.createElement('span');
+    s2.className = cls;
+    s2.textContent = hex + ' |' + ascii + '|';
+    frag.appendChild(s2);
+    frag.appendChild(document.createTextNode('\n'));
+    serLineCount++; serLineStart = true;
+  }
+}
+
+function serFlush() {
+  serFlushTimer = null;
+  if (!serPending.length) return;
+  const out = serOut();
+  if (!serHasContent) {
+    out.innerHTML = '';
+    serHasContent = true; serLineCount = 0; serLineStart = true;
+  }
+  const mode = document.getElementById('serialViewMode').value;
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < serPending.length; i++) {
+    const it = serPending[i];
+    if (it.kind === 'rx' || it.kind === 'tx') {
+      if (mode === 'hex') serBuildHex(frag, it.data, it.kind);
+      else serBuildText(frag, serDecoder.decode(it.data, { stream: true }), it.kind);
+    } else {
+      serBuildText(frag, it.text + '\n', it.kind);
+    }
+  }
+  serPending = [];
+  out.appendChild(frag);
+  // 行数上限：超出就从头部删，防止长时间挂机把页面拖垮
+  while (serLineCount > SER_MAX_LINES && out.firstChild) {
+    const n = out.firstChild;
+    if (n.nodeType === 3 && n.textContent === '\n') serLineCount--;
+    out.removeChild(n);
+  }
+  if (document.getElementById('serOptAutoscroll').checked) out.scrollTop = out.scrollHeight;
+}
+
+function serUpdateCount() {
+  const f = n => n < 1024 ? (n + ' B') : (n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB');
+  document.getElementById('serialRxCount').textContent = 'RX ' + f(serRxBytes);
+  document.getElementById('serialTxCount').textContent = 'TX ' + f(serTxBytes);
+}
+
+function serGetOptions() {
+  return {
+    baudRate: parseInt(document.getElementById('serialBaud').value) || 115200,
+    dataBits: parseInt(document.getElementById('serialDataBits').value) || 8,
+    parity: document.getElementById('serialParity').value,
+    stopBits: parseInt(document.getElementById('serialStopBits').value) || 1,
+    flowControl: document.getElementById('serialFlow').value,
+    bufferSize: 4096
+  };
+}
+
+function serSetConnected(on, baud) {
+  const st = document.getElementById('serialStatus');
+  const btn = document.getElementById('serialConnect');
+  btn.textContent = on ? '断开' : '连接串口';
+  if (on) { st.textContent = '已连接 ' + baud + ' bps'; st.style.color = '#3fb950'; }
+  else { st.textContent = '已断开'; st.style.color = 'var(--text2)'; }
+  ['serialBaud', 'serialDataBits', 'serialParity', 'serialStopBits', 'serialFlow'].forEach(id => {
+    document.getElementById(id).disabled = on;
+  });
+  if (!on) {
+    stopSerialTimer();
+    stopSignalPoll();
+    document.getElementById('serOptTimer').checked = false;
+  }
+}
+
 async function refreshSerialPorts() {
-  try { serialHistoryPorts = await navigator.serial.getPorts(); } catch(e) {}
+  try { serialHistoryPorts = await navigator.serial.getPorts(); } catch (e) { serialHistoryPorts = []; }
   const sel = document.getElementById('serialPortSelect');
-  sel.innerHTML = '<option value="">选择端口（首次需点连接按钮）</option>';
+  sel.innerHTML = '<option value="">未选择（首次点“连接串口”授权）</option>';
   serialHistoryPorts.forEach((p, i) => {
+    let name = '端口 ' + (i + 1);
     try {
       const info = p.getInfo();
-      const name = info.usbProductName || ('USB ' + info.usbVendorId?.toString(16));
-      sel.innerHTML += '<option value="' + i + '">' + name + '</option>';
-    } catch(e) {}
+      if (info.usbVendorId) {
+        const vid = info.usbVendorId.toString(16).toUpperCase().padStart(4, '0');
+        const pid = info.usbProductId.toString(16).toUpperCase().padStart(4, '0');
+        name = (info.usbProductName || 'USB 设备') + ' (' + vid + ':' + pid + ')';
+      }
+    } catch (e) {}
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = name;
+    sel.appendChild(opt);
   });
+  if (serialPort) {
+    const idx = serialHistoryPorts.indexOf(serialPort);
+    if (idx >= 0) sel.value = String(idx);
+  }
+}
+
+function stopSerialTimer() {
+  if (serTimerId) { clearInterval(serTimerId); serTimerId = null; }
+}
+function stopSignalPoll() {
+  if (serSignalTimer) { clearInterval(serSignalTimer); serSignalTimer = null; }
+  ['ledCTS', 'ledDSR', 'ledRI', 'ledDCD'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.classList.remove('on');
+  });
+}
+function startSignalPoll() {
+  stopSignalPoll();
+  serSignalTimer = setInterval(async () => {
+    if (!serialPort) return;
+    try {
+      const s = await serialPort.getSignals();
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.classList.toggle('on', !!v); };
+      set('ledCTS', s.clearToSend); set('ledDSR', s.dataSetReady);
+      set('ledRI', s.ringIndicator); set('ledDCD', s.carrierDetect);
+    } catch (e) {}
+  }, 1000);
+}
+
+async function serClosePort(log) {
+  stopSerialTimer(); stopSignalPoll();
+  try { if (serialReader) { serialReader.cancel(); serialReader = null; } } catch (e) {}
+  try { if (serialWriter) { serialWriter.releaseLock(); serialWriter = null; } } catch (e) {}
+  try { if (serialPort) await serialPort.close(); } catch (e) {}
+  serialPort = null;
+  serSetConnected(false);
+  if (log) serSys('串口已断开');
+}
+
+async function serOpenPort(port) {
+  const opt = serGetOptions();
+  try {
+    await port.open(opt);
+  } catch (e) {
+    if (e.name === 'NetworkError' || e.name === 'InvalidStateError') {
+      serErr('打开失败：端口可能已被别的程序占用，先关掉其他串口助手或烧录软件再试');
+    } else {
+      serErr('打开失败：' + e.message);
+    }
+    return false;
+  }
+  serialPort = port;
+  try { serialWriter = port.writable ? port.writable.getWriter() : null; } catch (e) { serialWriter = null; }
+  serSetConnected(true, opt.baudRate);
+  serialPaused = false;
+  document.getElementById('serialPause').textContent = '暂停';
+  if (serialHistoryPorts.indexOf(port) < 0) { serialHistoryPorts.push(port); refreshSerialPorts(); }
+  startSignalPoll();
+  const parityCn = { none: '无', even: '偶', odd: '奇' }[opt.parity];
+  serSys('已连接 ' + opt.baudRate + ' bps，' + opt.dataBits + ' 数据位 / ' + parityCn + '校验 / ' + opt.stopBits + ' 停止位');
+  readSerialLoop();
+  return true;
 }
 
 window.openSerialTerminal = function() {
-  // Disconnect PID serial if active
-  if (pidPort) { if (pidReader) { pidReader.cancel(); pidReader = null; } pidPort.close().catch(()=>{}); pidPort = null; }
+  // 切到串口终端时先停掉 PID 那条连接，同一个物理口不能两边同时占
+  if (pidPort) {
+    if (pidReader) { try { pidReader.cancel(); } catch (e) {} pidReader = null; }
+    try { pidPort.close(); } catch (e) {}
+    pidPort = null;
+  }
   document.getElementById('hardwareView').classList.add('hidden');
   document.getElementById('programView').classList.add('hidden');
   document.getElementById('pidView').classList.add('hidden');
   document.getElementById('serialView').classList.remove('hidden');
   document.getElementById('adjustBar').classList.add('hidden');
   refreshSerialPorts();
+  renderQuickCmds();
 };
 
 window.onPortSelect = async function() {
-  const sel = document.getElementById('serialPortSelect');
-  const idx = parseInt(sel.value);
+  const idx = parseInt(document.getElementById('serialPortSelect').value);
   if (isNaN(idx)) return;
-  try {
-    if (serialPort) { await serialPort.close(); serialPort = null; }
-    serialPort = serialHistoryPorts[idx];
-    const baud = parseInt(document.getElementById('serialBaud').value);
-    await serialPort.open({ baudRate: baud });
-    document.getElementById('serialConnect').textContent = '断开';
-    document.getElementById('serialStatus').textContent = '已连接 ' + baud + 'bps';
-    document.getElementById('serialStatus').style.color = '#3fb950';
-    serialPaused = false; document.getElementById('serialPause').textContent = '暂停';
-    readSerialLoop();
-  } catch(e) { console.error(e); }
+  const port = serialHistoryPorts[idx];
+  if (!port) return;
+  if (serialPort) await serClosePort(false);
+  await serOpenPort(port);
 };
 
 window.toggleSerial = async function() {
-  if (serialPort) {
-    if (serialReader) { serialReader.cancel(); serialReader = null; }
-    await serialPort.close();
-    serialPort = null;
-    document.getElementById('serialConnect').textContent = '连接串口';
-    document.getElementById('serialStatus').textContent = '已断开';
-    document.getElementById('serialStatus').style.color = 'var(--text2)';
-    return;
-  }
+  if (serialPort) { await serClosePort(true); return; }
   if (!('serial' in navigator)) {
     const s = document.getElementById('serialStatus');
     s.textContent = '当前浏览器不支持串口，请用电脑版 Chrome 或 Edge 打开本页';
@@ -2723,57 +3027,253 @@ window.toggleSerial = async function() {
   }
   try {
     const port = await navigator.serial.requestPort();
-    const baud = parseInt(document.getElementById('serialBaud').value);
-    await port.open({ baudRate: baud });
-    serialPort = port;
-    document.getElementById('serialConnect').textContent = '断开';
-    document.getElementById('serialStatus').textContent = '已连接 ' + baud + 'bps';
-    document.getElementById('serialStatus').style.color = '#3fb950';
-    serialPaused = false;
-    document.getElementById('serialPause').textContent = '暂停';
-    readSerialLoop();
+    await serOpenPort(port);
   } catch (e) {
     if (e.name !== 'AbortError') {
       document.getElementById('serialStatus').textContent = '错误: ' + e.message;
       document.getElementById('serialStatus').style.color = '#f85149';
+      serErr('连接失败：' + e.message);
     }
   }
 };
 
 async function readSerialLoop() {
-  const output = document.getElementById('serialOutput');
   if (!serialPort || !serialPort.readable) return;
-  if (!serialBuffer) output.innerHTML = '';
-  const decoder = new TextDecoder();
   try {
-    while (serialPort.readable) {
+    while (serialPort && serialPort.readable) {
       serialReader = serialPort.readable.getReader();
       try {
         while (true) {
           const { value, done } = await serialReader.read();
           if (done) break;
-          if (serialPaused) continue;
-          serialBuffer += decoder.decode(value, { stream: true });
-          if (serialBuffer.length > 50000) serialBuffer = serialBuffer.slice(-40000);
-          output.textContent = serialBuffer;
-          output.scrollTop = output.scrollHeight;
+          if (!value || !value.length) continue;
+          serRxBytes += value.length;
+          serAppendRaw(value);
+          // 暂停只是不刷新画面，数据照收照计数
+          // （旧实现在这里 continue 空转，会吃满一个 CPU 核）
+          if (!serialPaused) serPush('rx', value);
+          serUpdateCount();
         }
-      } finally { serialReader.releaseLock(); }
+      } finally {
+        try { serialReader.releaseLock(); } catch (e) {}
+        serialReader = null;
+      }
     }
   } catch (e) {
-    if (e.name !== 'AbortError' && e.name !== 'NetworkError') console.error(e);
+    if (e.name === 'NetworkError') {
+      serErr('设备已断开（检查 USB 线是不是松了）');
+      await serClosePort(false);
+    } else if (e.name !== 'AbortError' && e.name !== 'InvalidStateError') {
+      serErr('读取异常：' + e.message);
+    }
   }
 }
 
+// —— 发送 ——
+function serParseHex(str) {
+  const clean = str.replace(/[^0-9a-fA-F]/g, '');
+  if (!clean.length || clean.length % 2) return null;
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i * 2, 2), 16);
+  return out;
+}
+
+window.sendSerialData = async function() {
+  const input = document.getElementById('serialSendInput');
+  const text = input.value;
+  if (!text) return;
+  if (!serialPort || !serialWriter) { serErr('未连接串口，无法发送'); return; }
+  let bytes;
+  if (document.getElementById('serOptHexSend').checked) {
+    bytes = serParseHex(text);
+    if (!bytes) { serErr('HEX 格式不对：需要成对的十六进制字符，例如 A0 01 FF'); return; }
+  } else {
+    const eol = EOL_MAP[document.getElementById('serialEOL').value] || '';
+    let s = text;
+    if (eol && !s.endsWith(eol)) s += eol;
+    if (document.getElementById('serialEncoding').value !== 'utf-8' && /[^\x00-\x7F]/.test(s)) {
+      serSys('提示：发送按 UTF-8 编码，中文指令请确认下位机也是 UTF-8；纯 ASCII 指令不受影响');
+    }
+    bytes = new TextEncoder().encode(s);
+  }
+  try {
+    await serialWriter.write(bytes);
+    serTxBytes += bytes.length;
+    serUpdateCount();
+    if (document.getElementById('serOptEcho').checked) serPush('tx', bytes);
+    if (serSendHistory[serSendHistory.length - 1] !== text) serSendHistory.push(text);
+    if (serSendHistory.length > 50) serSendHistory.shift();
+    serHistIdx = -1;
+  } catch (e) {
+    serErr('发送失败：' + e.message);
+  }
+};
+
+window.onSerialSendKey = function(e) {
+  const ta = e.target;
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendSerialData(); return; }
+  if (e.key === 'ArrowUp' && ta.selectionStart === 0 && serSendHistory.length) {
+    e.preventDefault();
+    if (serHistIdx === -1) serHistIdx = serSendHistory.length;
+    serHistIdx = Math.max(0, serHistIdx - 1);
+    ta.value = serSendHistory[serHistIdx];
+  }
+  if (e.key === 'ArrowDown' && serHistIdx >= 0 && serHistIdx < serSendHistory.length) {
+    e.preventDefault();
+    serHistIdx++;
+    ta.value = (serHistIdx >= serSendHistory.length) ? '' : serSendHistory[serHistIdx];
+    if (serHistIdx >= serSendHistory.length) serHistIdx = -1;
+  }
+};
+
+window.restartSerialTimer = function() {
+  stopSerialTimer();
+  if (!document.getElementById('serOptTimer').checked) return;
+  const ms = Math.max(20, parseInt(document.getElementById('serialTimerMs').value) || 1000);
+  if (!serialPort) {
+    document.getElementById('serOptTimer').checked = false;
+    serSys('先连接串口，再开定时发送');
+    return;
+  }
+  serTimerId = setInterval(sendSerialData, ms);
+  serSys('定时发送已开启，周期 ' + ms + ' ms');
+};
+
+// —— 硬件信号 DTR / RTS ——
+window.applySerialSignals = async function() {
+  if (!serialPort) {
+    document.getElementById('serOptDTR').checked = false;
+    document.getElementById('serOptRTS').checked = false;
+    serSys('未连接串口，DTR / RTS 不可用');
+    return;
+  }
+  try {
+    await serialPort.setSignals({
+      dataTerminalReady: document.getElementById('serOptDTR').checked,
+      requestToSend: document.getElementById('serOptRTS').checked
+    });
+  } catch (e) { serErr('信号设置失败：' + e.message); }
+};
+
+window.resetDevice = async function() {
+  if (!serialPort) { serErr('未连接串口'); return; }
+  serSys('复位：DTR 拉低 100ms …');
+  try {
+    await serialPort.setSignals({ dataTerminalReady: false });
+    await new Promise(r => setTimeout(r, 100));
+    await serialPort.setSignals({ dataTerminalReady: true });
+    serSys('复位信号已发出');
+  } catch (e) { serErr('复位失败：' + e.message); }
+};
+
+// —— 显示选项 ——
+window.onSerialViewModeChange = function() {
+  const mode = document.getElementById('serialViewMode').value;
+  serOut().classList.toggle('hexmode', mode === 'hex');
+  serSys('已切换为 ' + (mode === 'hex' ? 'HEX' : '字符') + ' 显示（对新数据生效）');
+};
+window.onSerialEncodingChange = function() {
+  const enc = document.getElementById('serialEncoding').value;
+  try { serDecoder = new TextDecoder(enc); }
+  catch (e) { serDecoder = new TextDecoder('utf-8'); serErr('浏览器不支持该编码，已回退 UTF-8'); }
+  serSys('接收编码已切换为 ' + enc);
+};
+window.onSerialParamChange = function() {
+  if (serialPort) serSys('串口参数已改，断开重连后生效');
+};
+
 window.clearSerial = function() {
-  serialBuffer = '';
-  document.getElementById('serialOutput').innerHTML = '<span style=\"color:var(--text3);\">等待数据...</span>';
+  serPending = [];
+  if (serFlushTimer) { clearTimeout(serFlushTimer); serFlushTimer = null; }
+  serRaw = []; serRawLen = 0;
+  serRxBytes = 0; serTxBytes = 0;
+  serUpdateCount();
+  serHasContent = false; serLineCount = 1; serLineStart = true;
+  serOut().innerHTML = '<span class="sys">已清空</span>\n';
 };
 
 window.pauseSerial = function() {
   serialPaused = !serialPaused;
   document.getElementById('serialPause').textContent = serialPaused ? '继续' : '暂停';
+  serSys(serialPaused ? '已暂停显示（数据仍在接收并计数，不丢数据）' : '已恢复显示');
 };
+
+window.saveSerialLog = function() {
+  if (!serRawLen) { serErr('没有可保存的数据'); return; }
+  const enc = document.getElementById('serialEncoding').value;
+  let text = '';
+  try {
+    const dec = new TextDecoder(enc);
+    serRaw.forEach(c => { text += dec.decode(c, { stream: true }); });
+    text += dec.decode();
+  } catch (e) { text = '(按当前编码解码失败，请切回 UTF-8 再保存)'; }
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  const name = 'serial-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + '.txt';
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  serSys('已保存 ' + name + '（' + (serRawLen / 1024).toFixed(1) + ' KB）');
+};
+
+window.clearSerialSend = function() { document.getElementById('serialSendInput').value = ''; };
+
+// —— 快捷指令（存在本机浏览器 localStorage）——
+function loadQuickCmds() {
+  try { serQuickCmds = JSON.parse(localStorage.getItem(SER_QUICK_KEY) || '[]'); }
+  catch (e) { serQuickCmds = []; }
+}
+function saveQuickCmds() {
+  try { localStorage.setItem(SER_QUICK_KEY, JSON.stringify(serQuickCmds)); } catch (e) {}
+}
+function renderQuickCmds() {
+  const box = document.getElementById('serialQuickCmds');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!serQuickCmds.length) {
+    const tip = document.createElement('span');
+    tip.className = 'ser-lbl';
+    tip.textContent = '快捷指令：把常用命令填进输入框，点右侧「＋ 存为快捷」，下次一键发送';
+    box.appendChild(tip);
+    return;
+  }
+  const lbl = document.createElement('span');
+  lbl.className = 'ser-lbl';
+  lbl.textContent = '快捷：';
+  box.appendChild(lbl);
+  serQuickCmds.forEach((cmd, i) => {
+    const b = document.createElement('button');
+    b.className = 'ser-quick';
+    b.title = '点击即发送：' + cmd;
+    b.textContent = cmd.length > 18 ? cmd.slice(0, 17) + '…' : (cmd || '(空)');
+    b.onclick = function() {
+      document.getElementById('serialSendInput').value = cmd;
+      sendSerialData();
+    };
+    box.appendChild(b);
+    const x = document.createElement('span');
+    x.className = 'ser-del';
+    x.textContent = '✕';
+    x.title = '删除';
+    x.onclick = function() { serQuickCmds.splice(i, 1); saveQuickCmds(); renderQuickCmds(); };
+    box.appendChild(x);
+  });
+}
+window.addQuickCmd = function() {
+  const v = document.getElementById('serialSendInput').value;
+  if (!v.trim()) { serSys('输入框是空的，先填一条常用指令'); return; }
+  if (serQuickCmds.length >= 12) { serSys('快捷指令最多 12 条，先删掉不用的'); return; }
+  serQuickCmds.push(v);
+  saveQuickCmds();
+  renderQuickCmds();
+  serSys('已存为快捷指令');
+};
+
+loadQuickCmds();
+renderQuickCmds();
+serUpdateCount();
 
 // ============ PID Debug ============
 
@@ -2794,8 +3294,8 @@ async function refreshPIDPorts() {
 }
 
 window.openPIDDebug = function() {
-  // Disconnect serial if active
-  if (serialPort) { if (serialReader) { serialReader.cancel(); serialReader = null; } serialPort.close(); serialPort = null; document.getElementById('serialStatus').textContent = '已断开'; }
+  // 切到 PID 页时停掉串口终端（同一个物理口不能两边同时占），serClosePort 会一并停掉定时发送与信号轮询
+  if (serialPort) { serClosePort(false); }
   document.getElementById('hardwareView').classList.add('hidden');
   document.getElementById('programView').classList.add('hidden');
   document.getElementById('serialView').classList.add('hidden');
