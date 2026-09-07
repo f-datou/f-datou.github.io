@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="author" content="飞猫大头">
+  <meta name="description" content="四轴飞行器 PCB 交互教程 —— 飞猫大头，公众号连载《大头讲飞控》配套教学站">
+  <link rel="canonical" href="https://f-datou.github.io/">
   <title>四轴飞行器 - PCB 交互教程</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -38,7 +41,18 @@
     .header .nav-tab:hover { color: var(--text); border-color: var(--border); }
     .header .nav-tab.active { color: var(--accent); border-color: #1f6feb; background: rgba(31,111,235,0.1); }
 
-    .main { display: flex; height: calc(100vh - 56px); }
+    .main { display: flex; height: calc(100vh - 56px - 30px); }
+
+    /* 底部版权署名条 */
+    .site-footer {
+      height: 30px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      background: var(--bg2); border-top: 1px solid var(--border);
+      font-size: 0.72rem; color: var(--text3); padding: 0 16px;
+      user-select: text;
+    }
+    .site-footer a { color: var(--text3); text-decoration: none; }
+    .site-footer a:hover { color: var(--accent); text-decoration: underline; }
 
     /* 左侧：元件列表 */
     .sidebar {
@@ -423,6 +437,31 @@
         #serialOutput .sys{color:#58a6ff;font-style:italic;}
         #serialOutput .err{color:#f85149;}
         #serialOutput.hexmode{color:#79c0ff;}
+        /* ===== PID 调试页 ===== */
+        .pid-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+        .pid-btn{background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.78rem;}
+        .pid-btn:hover{border-color:var(--accent);color:var(--accent);}
+        .pid-btn.primary{background:var(--accent);color:#fff;border:none;padding:8px 20px;font-size:.85rem;font-weight:600;}
+        .pid-btn:disabled{opacity:.45;cursor:not-allowed;}
+        .pid-sel{background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:.78rem;outline:none;}
+        .pid-lbl{font-size:.76rem;color:var(--text2);white-space:nowrap;}
+        .pid-stat{font-size:.78rem;color:var(--text2);}
+        .pid-help{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;font-size:.78rem;line-height:1.75;color:var(--text2);}
+        .pid-help code{background:#0d1117;color:#79c0ff;padding:1px 6px;border-radius:4px;font-family:Consolas,'Courier New',monospace;font-size:.76rem;}
+        .pid-help b{color:var(--text);}
+        .pid-help ul{margin:4px 0 0;padding-left:18px;}
+        .pid-legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:26px;}
+        .pid-chip{display:inline-flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:3px 10px;cursor:pointer;font-size:.74rem;user-select:none;}
+        .pid-chip:hover{border-color:var(--accent);}
+        .pid-chip.off{opacity:.36;}
+        .pid-chip i{width:9px;height:9px;border-radius:2px;display:inline-block;flex:none;}
+        .pid-chip .nm{color:var(--text);}
+        .pid-chip .vl{font-family:Consolas,'Courier New',monospace;color:var(--text3);min-width:54px;text-align:right;}
+        .pid-chip input.nm-in{background:transparent;border:none;border-bottom:1px solid var(--accent);color:var(--text);font-size:.74rem;width:80px;outline:none;padding:0;}
+        .pid-canvas-wrap{flex:1;min-height:120px;background:#0d1117;border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative;}
+        .pid-canvas-wrap canvas{width:100%;height:100%;display:block;}
+        .pid-tip{font-size:.72rem;color:var(--text3);}
+        .pid-empty{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text3);font-size:.82rem;text-align:center;line-height:1.9;pointer-events:none;}
       </style>
 
       <!-- 第 1 行：串口参数 -->
@@ -512,25 +551,77 @@
 
     <!-- PID debug view -->
     <div id="pidView" class="hidden" style="width:100%;height:100%;display:flex;flex-direction:column;padding:16px;">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-        <button id="pidConnect" onclick="togglePIDSerial()" style="background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600;">连接串口</button>
-        <select id="pidPortSelect" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:0.78rem;min-width:180px;" onchange="onPIDPortSelect()">
+
+      <!-- 第 1 行：连接与操作 -->
+      <div class="pid-row">
+        <button id="pidConnect" class="pid-btn primary" onclick="togglePIDSerial()">连接串口</button>
+        <select id="pidPortSelect" class="pid-sel" style="min-width:180px;" onchange="onPIDPortSelect()">
           <option value="">选择端口（首次需点连接按钮）</option>
         </select>
-        <button onclick="refreshPIDPorts()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:6px;cursor:pointer;font-size:0.72rem;">↻</button>
-        <select id="pidBaud" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:0.82rem;">
-          <option value=9600>9600</option><option value=38400>38400</option><option value=57600>57600</option><option value=115200 selected>115200</option><option value=256000>256000</option>
+        <button class="pid-btn" onclick="refreshPIDPorts()" title="刷新已授权端口" style="padding:6px 9px;">↻</button>
+        <span class="pid-lbl">波特率</span>
+        <select id="pidBaud" class="pid-sel">
+          <option value=1200>1200</option><option value=2400>2400</option><option value=4800>4800</option>
+          <option value=9600>9600</option><option value=19200>19200</option><option value=38400>38400</option>
+          <option value=57600>57600</option><option value=115200 selected>115200</option>
+          <option value=230400>230400</option><option value=256000>256000</option>
+          <option value=460800>460800</option><option value=921600>921600</option>
         </select>
-        <span id="pidStatus" style="font-size:0.78rem;color:var(--text2);">未连接</span>
+        <span id="pidStatus" class="pid-stat">未连接</span>
         <span style="flex:1"></span>
-        <span style="font-size:0.72rem;color:var(--accent);">期望值</span><span style="color:var(--accent);font-size:1rem;">━</span>
-        <span style="font-size:0.72rem;color:#f0883e;">实际值</span><span style="color:#f0883e;font-size:1rem;">━</span>
-        <button onclick="clearPID()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.78rem;">清空</button>
-        <button id="pidPause" onclick="pausePID()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.78rem;">暂停</button>
+        <span class="pid-lbl">窗口</span>
+        <select id="pidWindow" class="pid-sel" onchange="onPIDWindowChange()">
+          <option value=2>最近 2 秒</option><option value=5>最近 5 秒</option>
+          <option value=10 selected>最近 10 秒</option><option value=30>最近 30 秒</option>
+          <option value=0>全部</option>
+        </select>
+        <button class="pid-btn" onclick="exportPIDCSV()" title="把收到的数据存成 CSV，Excel 可直接打开">导出 CSV</button>
+        <button class="pid-btn" onclick="togglePIDHelp()">格式说明</button>
+        <button id="pidPause" class="pid-btn" onclick="pausePID()">暂停</button>
+        <button class="pid-btn" onclick="clearPID()">清空</button>
       </div>
-      <div style="flex:1;background:#0d1117;border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative;">
-        <canvas id="pidCanvas" style="width:100%;height:100%;"></canvas>
-        <div id="pidPlaceholder" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text3);font-size:0.85rem;">等待数据...</div>
+
+      <!-- 数据格式说明（默认收起） -->
+      <div id="pidHelp" class="pid-help hidden">
+        <b>飞控端只要一行 printf，本页就能画出来。</b>比如放在定时发送的任务里，每 10ms 打一次：
+        <div style="margin:6px 0;">
+          <code>printf("%.2f,%.2f\n", target, actual);</code>
+          <span style="color:var(--text3);"> ← 两条曲线：期望值、实际值</span><br>
+          <code>printf("%.2f,%.2f,%.2f\n", roll, pitch, yaw);</code>
+          <span style="color:var(--text3);"> ← 三条曲线</span>
+        </div>
+        支持三种写法：
+        <ul>
+          <li><b>纯数字</b> — 逗号 / 空格 / Tab 分隔都行，一行几个数就是几条曲线</li>
+          <li><b>带名字</b> — <code>roll:1.2,pitch:3.4</code> 或 <code>roll=1.2 pitch=3.4</code>，名字会显示在下方色块上（双击色块可改名）</li>
+          <li><b>带时间戳</b> — 第一个数是毫秒时间戳也可以，会被当成普通曲线，不影响</li>
+        </ul>
+        <div style="margin-top:6px;color:var(--text3);">
+          提示：同一份 printf 输出，在「🔌 串口调试」页能当日志逐行看，在这里能画成曲线，两边波特率要设成一样的。
+        </div>
+      </div>
+
+      <!-- 第 2 行：通道图例（连上并收到数据后自动生成） -->
+      <div class="pid-row" id="pidLegend" style="margin-bottom:6px;"></div>
+
+      <!-- 画布 -->
+      <div class="pid-canvas-wrap" id="pidCanvasWrap">
+        <canvas id="pidCanvas"></canvas>
+        <div id="pidPlaceholder" class="pid-empty">
+          等待数据…<br>
+          <span style="font-size:.76rem;">飞控端用一行 printf 输出数字即可，点右上角「格式说明」看怎么写</span>
+        </div>
+      </div>
+
+      <!-- 第 3 行：状态栏 -->
+      <div class="pid-row" style="margin-bottom:0;margin-top:6px;">
+        <span class="pid-stat" id="pidStatRate">—</span>
+        <span class="pid-stat">·</span>
+        <span class="pid-stat" id="pidStatPoints">0 点</span>
+        <span class="pid-stat">·</span>
+        <span class="pid-stat" id="pidStatSpan">跨度 —</span>
+        <span style="flex:1"></span>
+        <span class="pid-tip">滚轮缩放 · 拖拽平移 · 双击复位 · 点色块可隐藏该条曲线</span>
       </div>
     </div>
 
@@ -572,7 +663,33 @@
   <img id="modalImg" src="" alt="原理图" />
 </div>
 
+<!-- 版权署名 -->
+<footer class="site-footer">
+  <span>🚁 飞猫大头 · 四轴飞行器教程</span>
+  <span>·</span>
+  <span>© 2026 内容原创，转载请注明出处</span>
+  <a href="https://f-datou.github.io/" target="_blank" rel="noopener">f-datou.github.io</a>
+</footer>
+
 <script>
+// ============ 主视图互斥切换 ============
+// hardware / program / serial / pid 四个主视图同一时刻只能显示一个，
+// 统一走这里，避免某处漏写 hidden 导致上一个界面残留在下方。
+function showMainView(view) {
+  var ids = { hardware: 'hardwareView', program: 'programView', serial: 'serialView', pid: 'pidView' };
+  ['hardwareView', 'programView', 'serialView', 'pidView'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+  var target = document.getElementById(ids[view]);
+  if (target) target.classList.remove('hidden');
+  var bar = document.getElementById('adjustBar');
+  if (bar) bar.classList.add('hidden');   // 坐标微调条只在硬件视图里由 selectComponent 重新打开
+  // 右侧元件信息面板归硬件视图和程序视图用，串口 / PID 调试时收起来
+  var panel = document.getElementById('panel');
+  if (panel) panel.classList.toggle('hidden', view === 'serial' || view === 'pid');
+}
+
 const components = [
   {
     id: 'stm32',
@@ -844,8 +961,7 @@ components.forEach((comp, index) => {
   btn.className = 'comp-btn';
   btn.innerHTML = `<span class="dot" style="background:${comp.color}"></span>${comp.name}`;
   btn.onclick = () => {
-    document.getElementById('hardwareView').classList.remove('hidden');
-    document.getElementById('programView').classList.add('hidden');
+    showMainView('hardware');
     selectComponent(comp.id);
   };
   document.getElementById('navHardware').appendChild(btn);
@@ -1040,8 +1156,7 @@ window.toggleNav = function(section) {
   }
   // Switch to remote PCB when opening remote hardware
   if (section === 'remoteHw' && children && !children.classList.contains('hidden')) {
-    document.getElementById('hardwareView').classList.remove('hidden');
-    document.getElementById('programView').classList.add('hidden');
+    showMainView('hardware');
     switchProduct('remote');
   }
 };
@@ -1436,11 +1551,7 @@ programModules.forEach(m => {
   btn.className = 'prog-btn';
   btn.innerHTML = `<span class="dot" style="background:${m.icon}"></span>${m.name}`;
   btn.onclick = () => {
-    // Switch to program view
-    document.getElementById('hardwareView').classList.add('hidden');
-    document.getElementById('programView').classList.remove('hidden');
-    // Hide adjust bar
-    document.getElementById('adjustBar').classList.add('hidden');
+    showMainView('program');
     selectProgramModule(m.id);
   };
   navProgList.appendChild(btn);
@@ -2202,9 +2313,7 @@ remoteExamples.forEach(ex => {
 });
 
 function showExample(ex) {
-  document.getElementById('hardwareView').classList.remove('hidden');
-  document.getElementById('programView').classList.add('hidden');
-  document.getElementById('serialView').classList.add('hidden');
+  showMainView('hardware');
   panel.innerHTML = '<h3>📝 ' + ex.name + ' 例程</h3>' +
     '<p class="desc">' + ex.desc + '</p>' +
     '<div class="info-section">' +
@@ -2408,9 +2517,7 @@ remoteProgModules.forEach(m => {
   btn.className = 'prog-btn';
   btn.innerHTML = `<span class="dot" style="background:${m.icon}"></span>${m.name}`;
   btn.onclick = () => {
-    document.getElementById('hardwareView').classList.add('hidden');
-    document.getElementById('programView').classList.remove('hidden');
-    document.getElementById('adjustBar').classList.add('hidden');
+    showMainView('program');
     selectRemoteProgModule(m.id);
   };
   navRemoteProg.appendChild(btn);
@@ -2660,8 +2767,7 @@ remoteComponents.forEach(comp => {
   btn.innerHTML = `<span class="dot" style="background:${comp.color}"></span>${comp.name}`;
   btn.onclick = () => {
     switchProduct('remote');
-    document.getElementById('hardwareView').classList.remove('hidden');
-    document.getElementById('programView').classList.add('hidden');
+    showMainView('hardware');
     selectComponent(comp.id);
   };
   navRemoteHw.appendChild(btn);
@@ -2714,8 +2820,7 @@ function buildMarker(comp) {
 document.querySelectorAll('.nav-sub[onclick*="hardware"]').forEach(el => {
   const orig = el.onclick;
   el.onclick = function(e) {
-    document.getElementById('hardwareView').classList.remove('hidden');
-    document.getElementById('programView').classList.add('hidden');
+    showMainView('hardware');
     // Determine which product based on parent menu
     if (el.parentElement.id === 'navRemote') {
       switchProduct('remote');
@@ -2732,15 +2837,13 @@ window.switchTab = function(tab) {
   document.getElementById('tabRemote').classList.toggle('active', tab === 'remote');
   if (tab === 'drone') {
     switchProduct('drone');
-    document.getElementById('hardwareView').classList.remove('hidden');
-    document.getElementById('programView').classList.add('hidden');
+    showMainView('hardware');
     // Expand drone menu
     document.getElementById('navDrone').classList.remove('hidden');
     document.getElementById('arrowDrone').textContent = '▼';
   } else {
     switchProduct('remote');
-    document.getElementById('hardwareView').classList.remove('hidden');
-    document.getElementById('programView').classList.add('hidden');
+    showMainView('hardware');
     document.getElementById('navDrone').classList.add('hidden');
     document.getElementById('arrowDrone').textContent = '▶';
     document.getElementById('navRemote').classList.remove('hidden');
@@ -2957,23 +3060,57 @@ function startSignalPoll() {
   }, 1000);
 }
 
+let serialReadTask = null;   // readSerialLoop 的 Promise，关闭时要等它跑完才能解锁
+
 async function serClosePort(log) {
+  if (!serialPort && !serialReadTask) { serSetConnected(false); return; }
   stopSerialTimer(); stopSignalPoll();
-  try { if (serialReader) { serialReader.cancel(); serialReader = null; } } catch (e) {}
-  try { if (serialWriter) { serialWriter.releaseLock(); serialWriter = null; } } catch (e) {}
-  try { if (serialPort) await serialPort.close(); } catch (e) {}
-  serialPort = null;
+
+  // ① 先把全局引用摘掉：读循环的外层 while 条件是 serialPort，
+  //    置空后它不会再新建 reader，跑完这一轮就退出
+  const port = serialPort, reader = serialReader, writer = serialWriter;
+  serialPort = null; serialReader = null; serialWriter = null;
+
+  // ② cancel 必须 await。它会让挂在 read() 上的 Promise 立刻结束（done:true），
+  //    不等它就往下走的话，close() 会在流仍被锁着时被调用 → InvalidStateError → 端口实际不释放
+  if (reader) {
+    try { await reader.cancel(); } catch (e) {}
+  }
+
+  // ③ 等读循环真正跑到 finally 把锁交出来（正常情况下很快，
+  //    加 800ms 上限兜底，防止它卡在别的地方把整个关闭流程吊死）
+  if (serialReadTask) {
+    const t = serialReadTask; serialReadTask = null;
+    await Promise.race([
+      t.catch(() => {}),
+      new Promise(r => setTimeout(r, 800)),
+    ]);
+  }
+
+  // ④ 释放写端，最后才是真正的 close
+  if (writer) {
+    try { writer.releaseLock(); } catch (e) {}
+  }
+  if (port) {
+    try { await port.close(); } catch (e) {
+      console.warn('串口关闭异常', e);
+      if (log) serErr('关闭端口时出问题：' + e.message);
+    }
+  }
+
   serSetConnected(false);
   if (log) serSys('串口已断开');
 }
 
 async function serOpenPort(port) {
   const opt = serGetOptions();
+  // 保险：进来先把可能残留的旧连接收干净（比如上次 close 失败过）
+  if (serialPort || serialReadTask) await serClosePort(false);
   try {
     await port.open(opt);
   } catch (e) {
     if (e.name === 'NetworkError' || e.name === 'InvalidStateError') {
-      serErr('打开失败：端口可能已被别的程序占用，先关掉其他串口助手或烧录软件再试');
+      serErr('打不开：端口还被占着。多数情况是上一次没释放干净 —— 等两秒再连，还不行就刷新页面');
     } else {
       serErr('打开失败：' + e.message);
     }
@@ -2988,22 +3125,32 @@ async function serOpenPort(port) {
   startSignalPoll();
   const parityCn = { none: '无', even: '偶', odd: '奇' }[opt.parity];
   serSys('已连接 ' + opt.baudRate + ' bps，' + opt.dataBits + ' 数据位 / ' + parityCn + '校验 / ' + opt.stopBits + ' 停止位');
-  readSerialLoop();
+  serialReadTask = readSerialLoop();
   return true;
 }
 
-window.openSerialTerminal = function() {
-  // 切到串口终端时先停掉 PID 那条连接，同一个物理口不能两边同时占
-  if (pidPort) {
-    if (pidReader) { try { pidReader.cancel(); } catch (e) {} pidReader = null; }
-    try { pidPort.close(); } catch (e) {}
-    pidPort = null;
-  }
-  document.getElementById('hardwareView').classList.add('hidden');
-  document.getElementById('programView').classList.add('hidden');
-  document.getElementById('pidView').classList.add('hidden');
-  document.getElementById('serialView').classList.remove('hidden');
-  document.getElementById('adjustBar').classList.add('hidden');
+// 关页面 / 刷新前尽力把串口放掉。
+// Web Serial 通常由浏览器回收，但在「没点断开直接关标签」这种情况下偶尔会残留，
+// 这里同步调用一次 close 能显著降低「换个页面再连就连不上」的概率。
+window.addEventListener('beforeunload', function() {
+  try {
+    if (serialPort) {
+      if (serialReader) { try { serialReader.cancel(); } catch (e) {} }
+      try { serialPort.close(); } catch (e) {}
+    }
+    if (pidPort) {
+      if (pidReader) { try { pidReader.cancel(); } catch (e) {} }
+      try { pidPort.close(); } catch (e) {}
+    }
+  } catch (e) {}
+});
+
+window.openSerialTerminal = async function() {
+  // 切到串口终端时先停掉 PID 那条连接，同一个物理口不能两边同时占。
+  // 必须 await 完整的关闭流程（cancel → 等读循环解锁 → close），
+  // 只调 close 会因为流仍被锁而失败，端口留在后台没释放。
+  if (pidPort || pidReadTask) await pidClosePort();
+  showMainView('serial');
   refreshSerialPorts();
   renderQuickCmds();
 };
@@ -3018,7 +3165,7 @@ window.onPortSelect = async function() {
 };
 
 window.toggleSerial = async function() {
-  if (serialPort) { await serClosePort(true); return; }
+  if (serialPort || serialReadTask) { await serClosePort(true); return; }
   if (!('serial' in navigator)) {
     const s = document.getElementById('serialStatus');
     s.textContent = '当前浏览器不支持串口，请用电脑版 Chrome 或 Edge 打开本页';
@@ -3041,10 +3188,13 @@ async function readSerialLoop() {
   if (!serialPort || !serialPort.readable) return;
   try {
     while (serialPort && serialPort.readable) {
-      serialReader = serialPort.readable.getReader();
+      // 用局部引用持有 reader：关闭流程会把全局 serialReader 置 null，
+      // 如果这里用全局变量去 releaseLock，会拿到 undefined 而漏解锁
+      const reader = serialPort.readable.getReader();
+      serialReader = reader;
       try {
         while (true) {
-          const { value, done } = await serialReader.read();
+          const { value, done } = await reader.read();
           if (done) break;
           if (!value || !value.length) continue;
           serRxBytes += value.length;
@@ -3055,8 +3205,8 @@ async function readSerialLoop() {
           serUpdateCount();
         }
       } finally {
-        try { serialReader.releaseLock(); } catch (e) {}
-        serialReader = null;
+        try { reader.releaseLock(); } catch (e) {}
+        if (serialReader === reader) serialReader = null;
       }
     }
   } catch (e) {
@@ -3277,9 +3427,23 @@ serUpdateCount();
 
 // ============ PID Debug ============
 
-let pidPort = null, pidReader = null, pidPaused = false, pidHistory = [];
+let pidPort = null, pidReader = null, pidPaused = false;
+let pidReadTask = null;   // readPIDLoop 的 Promise，关闭前要等它退出
 let pidHistoryPorts = [];
-const PID_MAX_POINTS = 500;
+const PID_MAX_POINTS = 6000;   // 环形缓冲上限，400Hz 下约 15 秒
+
+// —— 数据模型 ——
+// pidHistory : [ { t: 距首包的毫秒数, v: [通道0, 通道1, ...] } ]
+// pidChannels: [ { key, name, color, show, last } ]
+let pidHistory = [];
+let pidChannels = [];
+let pidChanLocked = false;      // 通道数是否已按首帧锁定
+let pidT0 = null;               // 首包时间戳
+let pidLastLegend = 0;          // 图例读数节流
+const PID_COLORS = ['#58a6ff', '#f0883e', '#3fb950', '#f85149', '#bc8cff', '#39c5cf', '#e3b341', '#ff7b72'];
+const PID_CHAN_KEY = 'feimaodatou.pidChannelNames';
+let pidNameMap = {};
+try { pidNameMap = JSON.parse(localStorage.getItem(PID_CHAN_KEY) || '{}'); } catch (e) { pidNameMap = {}; }
 
 async function refreshPIDPorts() {
   try { pidHistoryPorts = await navigator.serial.getPorts(); } catch(e) {}
@@ -3293,43 +3457,74 @@ async function refreshPIDPorts() {
   });
 }
 
-window.openPIDDebug = function() {
-  // 切到 PID 页时停掉串口终端（同一个物理口不能两边同时占），serClosePort 会一并停掉定时发送与信号轮询
-  if (serialPort) { serClosePort(false); }
-  document.getElementById('hardwareView').classList.add('hidden');
-  document.getElementById('programView').classList.add('hidden');
-  document.getElementById('serialView').classList.add('hidden');
-  document.getElementById('pidView').classList.remove('hidden');
-  document.getElementById('adjustBar').classList.add('hidden');
+window.openPIDDebug = async function() {
+  // 切到 PID 页时停掉串口终端（同一个物理口不能两边同时占），
+  // serClosePort 会一并停掉定时发送与信号轮询，同样要等它真正关完
+  if (serialPort || serialReadTask) await serClosePort(false);
+  showMainView('pid');
   refreshPIDPorts();
+  renderPIDLegend();
+  updatePIDStats();
   initPIDCanvas();
 };
 
 window.onPIDPortSelect = async function() {
   const idx = parseInt(document.getElementById('pidPortSelect').value);
   if (isNaN(idx)) return;
+  const port = pidHistoryPorts[idx];
+  if (!port) return;
   try {
-    if (pidPort) { await pidPort.close(); pidPort = null; }
-    pidPort = pidHistoryPorts[idx];
+    await pidClosePort();          // 统一的可靠关闭，别再裸调 port.close()
+    pidPort = port;
     const baud = parseInt(document.getElementById('pidBaud').value);
     await pidPort.open({ baudRate: baud });
-    document.getElementById('pidConnect').textContent = '断开';
-    document.getElementById('pidStatus').textContent = '已连接 ' + baud + 'bps';
-    document.getElementById('pidStatus').style.color = '#3fb950';
+    pidSetConnected(true, baud);
     pidPaused = false; document.getElementById('pidPause').textContent = '暂停';
-    readPIDLoop();
-  } catch(e) { console.error(e); }
+    resetPIDSession();
+    pidReadTask = readPIDLoop();
+  } catch(e) {
+    console.error(e);
+    const st = document.getElementById('pidStatus');
+    if (st && e && e.name) {
+      st.textContent = (e.name === 'NetworkError' || e.name === 'InvalidStateError')
+        ? '打不开：端口没释放干净，等两秒再试或刷新页面'
+        : ('错误: ' + e.message);
+      st.style.color = '#f85149';
+    }
+  }
 };
 
-window.togglePIDSerial = async function() {
-  if (pidPort) {
-    if (pidReader) { pidReader.cancel(); pidReader = null; }
-    await pidPort.close(); pidPort = null;
-    document.getElementById('pidConnect').textContent = '连接串口';
-    document.getElementById('pidStatus').textContent = '已断开';
-    document.getElementById('pidStatus').style.color = 'var(--text2)';
-    return;
+// 串口页和 PID 页共用同一个物理口，所以两边必须用同一套可靠的关闭流程：
+// cancel(等) → 等读循环退出解锁 → releaseLock → close。
+// 少等任何一步，close 都会在流仍被锁的时候失败（InvalidStateError），
+// 端口表面断开实则没释放，下次连接就报"端口被占用"。
+async function pidClosePort() {
+  if (!pidPort && !pidReadTask) { pidSetConnected(false); return; }
+  const port = pidPort, reader = pidReader;
+  pidPort = null; pidReader = null;
+
+  if (reader) { try { await reader.cancel(); } catch (e) {} }
+  if (pidReadTask) {
+    const t = pidReadTask; pidReadTask = null;
+    await Promise.race([t.catch(() => {}), new Promise(r => setTimeout(r, 800))]);
   }
+  if (port) {
+    try { await port.close(); } catch (e) { console.warn('PID 串口关闭异常', e); }
+  }
+  pidSetConnected(false);
+}
+
+function pidSetConnected(on, baud) {
+  const btn = document.getElementById('pidConnect');
+  const st = document.getElementById('pidStatus');
+  if (!btn || !st) return;
+  btn.textContent = on ? '断开' : '连接串口';
+  st.textContent = on ? ('已连接 ' + baud + ' bps') : '未连接';
+  st.style.color = on ? '#3fb950' : 'var(--text2)';
+}
+
+window.togglePIDSerial = async function() {
+  if (pidPort) { await pidClosePort(); return; }
   if (!('serial' in navigator)) {
     const s = document.getElementById('pidStatus');
     s.textContent = '当前浏览器不支持串口，请用电脑版 Chrome 或 Edge 打开本页';
@@ -3339,51 +3534,113 @@ window.togglePIDSerial = async function() {
   try {
     const port = await navigator.serial.requestPort();
     const baud = parseInt(document.getElementById('pidBaud').value);
+    if (pidPort || pidReadTask) await pidClosePort();   // 进来先确保旧连接已干净释放
     await port.open({ baudRate: baud });
     pidPort = port;
-    document.getElementById('pidConnect').textContent = '断开';
-    document.getElementById('pidStatus').textContent = '已连接 ' + baud + 'bps';
-    document.getElementById('pidStatus').style.color = '#3fb950';
+    pidSetConnected(true, baud);
     pidPaused = false; document.getElementById('pidPause').textContent = '暂停';
+    resetPIDSession();
     refreshPIDPorts();
-    readPIDLoop();
+    pidReadTask = readPIDLoop();
   } catch(e) {
     if (e.name !== 'AbortError') {
-      document.getElementById('pidStatus').textContent = '错误: ' + e.message;
-      document.getElementById('pidStatus').style.color = '#f85149';
+      const st = document.getElementById('pidStatus');
+      const msg = (e.name === 'NetworkError' || e.name === 'InvalidStateError')
+        ? '打不开：端口没释放干净，等两秒再试或刷新页面'
+        : ('错误: ' + e.message);
+      if (st) { st.textContent = msg; st.style.color = '#f85149'; }
     }
   }
 };
+
+// 解析一行：返回 { names, vals }；names 为 null 表示纯数字行；整行不可解析返回 null
+function parsePIDLine(line) {
+  const s = line.trim();
+  if (!s) return null;
+
+  // ① 带标签： roll:1.2,pitch:3.4   /   roll=1.2 pitch=3.4
+  const tagged = s.match(/[A-Za-z_\u4e00-\u9fa5][\w\u4e00-\u9fa5]*\s*[:=]\s*-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g);
+  if (tagged && tagged.length) {
+    const names = [], vals = [];
+    let ok = true;
+    for (const tok of tagged) {
+      const m = tok.match(/^([A-Za-z_\u4e00-\u9fa5][\w\u4e00-\u9fa5]*)\s*[:=]\s*(.+)$/);
+      if (!m) { ok = false; break; }
+      const v = parseFloat(m[2]);
+      if (isNaN(v)) { ok = false; break; }
+      names.push(m[1]); vals.push(v);
+    }
+    if (ok && vals.length) return { names: names, vals: vals };
+  }
+
+  // ② 纯数字：逗号 / 空格 / Tab / 分号分隔
+  const parts = s.split(/[,;\t ]+/).filter(x => x !== '');
+  if (!parts.length) return null;
+  const vals = [];
+  for (const p of parts) {
+    const v = parseFloat(p);
+    if (isNaN(v)) return null;   // 混进非数字 → 整行丢弃，多半是启动日志
+    vals.push(v);
+  }
+  return { names: null, vals: vals };
+}
+
+// 按首帧确定通道数并建图例
+function ensurePIDChannels(names, count) {
+  if (pidChanLocked) return;
+  pidChannels = [];
+  for (let i = 0; i < count; i++) {
+    const key = (names && names[i]) ? names[i] : ('ch' + (i + 1));
+    pidChannels.push({
+      key: key,
+      name: pidNameMap[key] || ((names && names[i]) ? names[i] : '通道' + (i + 1)),
+      color: PID_COLORS[i % PID_COLORS.length],
+      show: true,
+      last: 0
+    });
+  }
+  pidChanLocked = true;
+  renderPIDLegend();
+}
 
 async function readPIDLoop() {
   const decoder = new TextDecoder();
   let leftover = '';
   try {
     while (pidPort && pidPort.readable) {
-      pidReader = pidPort.readable.getReader();
+      // 同串口页：用局部引用持有 reader，避免关闭流程置空全局变量后漏解锁
+      const reader = pidPort.readable.getReader();
+      pidReader = reader;
       try {
         while (true) {
-          const { value, done } = await pidReader.read();
+          const { value, done } = await reader.read();
           if (done) break;
           if (pidPaused) continue;
-          const text = decoder.decode(value, { stream: true });
-          leftover += text;
+          leftover += decoder.decode(value, { stream: true });
           const lines = leftover.split(/\r?\n/);
           leftover = lines.pop() || '';
+
+          let got = false;
           for (const line of lines) {
-            const parts = line.trim().split(/[,\\t ]+/);
-            if (parts.length >= 2) {
-              const desired = parseFloat(parts[0]);
-              const actual = parseFloat(parts[1]);
-              if (!isNaN(desired) && !isNaN(actual)) {
-                pidHistory.push({ d: desired, a: actual });
-                if (pidHistory.length > PID_MAX_POINTS) pidHistory.shift();
-              }
-            }
+            const r = parsePIDLine(line);
+            if (!r || !r.vals.length) continue;
+            if (!pidChanLocked) ensurePIDChannels(r.names, r.vals.length);
+            // 通道数对不上（多半是开机日志）直接丢弃
+            if (r.vals.length !== pidChannels.length) continue;
+            const now = performance.now();
+            if (pidT0 === null) pidT0 = now;
+            const v = r.vals.slice(0, pidChannels.length);
+            pidHistory.push({ t: now - pidT0, v: v });
+            if (pidHistory.length > PID_MAX_POINTS) pidHistory.shift();
+            for (let i = 0; i < pidChannels.length; i++) pidChannels[i].last = v[i];
+            got = true;
           }
-          drawPIDCanvas();
+          if (got) { drawPIDCanvas(); updatePIDStats(); }
         }
-      } finally { pidReader.releaseLock(); }
+      } finally {
+        try { reader.releaseLock(); } catch (e) {}
+        if (pidReader === reader) pidReader = null;
+      }
     }
   } catch(e) {
     if (e.name !== 'AbortError' && e.name !== 'NetworkError') console.error(e);
@@ -3391,136 +3648,375 @@ async function readPIDLoop() {
 }
 
 let pidCtx = null, pidW = 0, pidH = 0;
-let pidZoomX = 1, pidZoomY = 1, pidPanX = 0, pidPanY = 0;
-let pidDragging = false, pidDragStart = {x:0,y:0}, pidPanStart = {x:0,y:0};
+let pidZoomY = 1, pidZoomTime = 1, pidPanX = 0, pidPanY = 0;  // pidPanX 单位毫秒，pidPanY 单位数值
+let pidDragging = false, pidDragStart = { x: 0, y: 0 }, pidPanStart = { x: 0, y: 0 };
+let pidWinSec = 10;          // 时间窗口（秒），0 = 显示全部
+let pidCurYRange = 2;        // 当前可视 Y 跨度，拖拽平移换算用
 
-function initPIDCanvas() {
-  const canvas = document.getElementById('pidCanvas');
-  const rect = canvas.parentElement.getBoundingClientRect();
-  canvas.width = rect.width * (window.devicePixelRatio || 1);
-  canvas.height = rect.height * (window.devicePixelRatio || 1);
-  pidW = canvas.width; pidH = canvas.height;
-  pidCtx = canvas.getContext('2d');
-  pidZoomX = 1; pidZoomY = 1; pidPanX = 0; pidPanY = 0;
-  pidHistory = [];
-  document.getElementById('pidPlaceholder').style.display = 'block';
+function pidDpr() { return window.devicePixelRatio || 1; }
+
+function fmtPIDVal(v) {
+  if (v === undefined || v === null || isNaN(v)) return '—';
+  const a = Math.abs(v);
+  if (a >= 1000) return v.toFixed(0);
+  if (a >= 10) return v.toFixed(2);
+  return v.toFixed(3);
 }
 
-// Wheel zoom on PID canvas
-(function() {
-  const el = document.getElementById('pidCanvas').parentElement;
-  el.addEventListener('wheel', (e) => {
-    if (!pidCtx || pidHistory.length === 0) return;
+function escapePIDHtml(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+// ---------------- 通道图例 ----------------
+function renderPIDLegend() {
+  const box = document.getElementById('pidLegend');
+  if (!box) return;
+  if (!pidChannels.length) {
+    box.innerHTML = '<span class="pid-tip">连上串口并收到数据后，这里会列出各条曲线（单击隐藏、双击改名）</span>';
+    return;
+  }
+  box.innerHTML = '';
+  pidChannels.forEach(function (c, i) {
+    const chip = document.createElement('span');
+    chip.className = 'pid-chip' + (c.show ? '' : ' off');
+    chip.title = '单击隐藏/显示这条曲线，双击改名字';
+    chip.innerHTML = '<i style="background:' + c.color + '"></i>'
+      + '<span class="nm">' + escapePIDHtml(c.name) + '</span>'
+      + '<span class="vl">' + fmtPIDVal(c.last) + '</span>';
+    chip.addEventListener('click', function (e) {
+      if (e.detail > 1) return;              // 双击交给 dblclick 处理
+      c.show = !c.show;
+      chip.classList.toggle('off', !c.show);
+      drawPIDCanvas();
+    });
+    chip.addEventListener('dblclick', function (e) { e.preventDefault(); renamePIDChannel(i, chip); });
+    box.appendChild(chip);
+  });
+}
+
+function renamePIDChannel(idx, chip) {
+  const c = pidChannels[idx];
+  const nmSpan = chip.querySelector('.nm');
+  if (!nmSpan) return;
+  const input = document.createElement('input');
+  input.className = 'nm-in';
+  input.value = c.name;
+  nmSpan.replaceWith(input);
+  input.focus(); input.select();
+  let done = false;
+  const finish = function (save) {
+    if (done) return; done = true;
+    if (save && input.value.trim()) {
+      c.name = input.value.trim();
+      pidNameMap[c.key] = c.name;
+      try { localStorage.setItem(PID_CHAN_KEY, JSON.stringify(pidNameMap)); } catch (e) {}
+    }
+    renderPIDLegend();
+    drawPIDCanvas();
+  };
+  input.addEventListener('blur', function () { finish(true); });
+  input.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+  });
+}
+
+// 读数每 100ms 刷一次，别每帧重排 DOM
+function refreshPIDLegendValues() {
+  const now = performance.now();
+  if (now - pidLastLegend < 100) return;
+  pidLastLegend = now;
+  const box = document.getElementById('pidLegend');
+  if (!box) return;
+  const vls = box.querySelectorAll('.vl');
+  for (let i = 0; i < vls.length && i < pidChannels.length; i++) {
+    vls[i].textContent = fmtPIDVal(pidChannels[i].last);
+  }
+}
+
+// ---------------- 状态栏 ----------------
+function updatePIDStats() {
+  const n = pidHistory.length;
+  const elPts = document.getElementById('pidStatPoints');
+  const elSpan = document.getElementById('pidStatSpan');
+  const elRate = document.getElementById('pidStatRate');
+  if (!elPts) return;
+  elPts.textContent = n + ' 点';
+  if (n >= 2) {
+    const tEnd = pidHistory[n - 1].t;
+    const span = tEnd - pidHistory[0].t;
+    elSpan.textContent = '跨度 ' + (span / 1000).toFixed(1) + ' s';
+    // 用最近 1 秒的点数算采样率：缓冲满了之后全程平均值会失真
+    let cnt = 0;
+    for (let i = n - 1; i >= 0 && pidHistory[i].t > tEnd - 1000; i--) cnt++;
+    elRate.textContent = (cnt > 1) ? (cnt + ' Hz')
+      : (span > 0 ? Math.round((n - 1) / (span / 1000)) + ' Hz' : '—');
+  } else {
+    elSpan.textContent = '跨度 —';
+    elRate.textContent = '—';
+  }
+  refreshPIDLegendValues();
+}
+
+// ---------------- 画布 ----------------
+function initPIDCanvas() {
+  const canvas = document.getElementById('pidCanvas');
+  if (!canvas) return;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = pidDpr();
+  canvas.width = Math.max(1, Math.round(rect.width * dpr));
+  canvas.height = Math.max(1, Math.round(rect.height * dpr));
+  pidW = canvas.width; pidH = canvas.height;
+  pidCtx = canvas.getContext('2d');
+  pidZoomY = 1; pidZoomTime = 1; pidPanX = 0; pidPanY = 0;
+  drawPIDCanvas();     // 不清数据：改窗口大小不会丢曲线
+}
+
+// 第一个 t >= target 的下标
+function pidIdxAt(arr, t) {
+  let lo = 0, hi = arr.length - 1, res = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (arr[mid].t < t) { res = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return res;
+}
+
+function drawPIDCanvas() {
+  const ctx = pidCtx, w = pidW, h = pidH;
+  if (!ctx) return;
+  const placeholder = document.getElementById('pidPlaceholder');
+  ctx.clearRect(0, 0, w, h);
+
+  if (!pidHistory.length || !pidChannels.length) {
+    if (placeholder) placeholder.style.display = 'block';
+    return;
+  }
+  if (placeholder) placeholder.style.display = 'none';
+
+  const dpr = pidDpr();
+  const m = { top: 14 * dpr, right: 14 * dpr, bottom: 26 * dpr, left: 54 * dpr };
+  const pw = w - m.left - m.right;
+  const phh = h - m.top - m.bottom;
+  if (pw <= 10 || phh <= 10) return;
+
+  // —— 时间窗口 ——
+  const tLast = pidHistory[pidHistory.length - 1].t;
+  const tFirst = pidHistory[0].t;
+  const fullSpan = Math.max(tLast - tFirst, 1);
+  let spanMs = pidWinSec > 0 ? (pidWinSec * 1000) / pidZoomTime : fullSpan / pidZoomTime;
+  spanMs = Math.min(spanMs, fullSpan);
+  let tEnd = tLast - pidPanX;
+  tEnd = Math.min(Math.max(tEnd, tFirst + spanMs * 0.5), tLast + spanMs * 0.5);
+  const tStart = tEnd - spanMs;
+
+  const i0 = pidIdxAt(pidHistory, tStart);
+  let i1 = pidIdxAt(pidHistory, tEnd);
+  if (i1 < pidHistory.length - 1) i1++;
+  if (i1 - i0 < 2) return;
+
+  // —— Y 范围（只算勾选显示的通道）——
+  const shown = [];
+  pidChannels.forEach(function (c, ci) { if (c.show) shown.push(ci); });
+  let yMin = Infinity, yMax = -Infinity;
+  if (shown.length) {
+    for (let i = i0; i <= i1 && i < pidHistory.length; i++) {
+      const v = pidHistory[i].v;
+      for (let k = 0; k < shown.length; k++) {
+        const x = v[shown[k]];
+        if (x < yMin) yMin = x;
+        if (x > yMax) yMax = x;
+      }
+    }
+  }
+  if (!isFinite(yMin) || !isFinite(yMax)) { yMin = -1; yMax = 1; }
+  const yRange = Math.max(yMax - yMin, 0.001);
+  const yCenter = (yMin + yMax) / 2;
+  const half = (yRange * 1.08) / (2 * pidZoomY);
+  const yLo = yCenter - half - pidPanY;
+  const yHi = yCenter + half - pidPanY;
+  pidCurYRange = yHi - yLo;
+
+  const toX = function (t) { return m.left + pw * (t - tStart) / spanMs; };
+  const toY = function (v) { return m.top + phh * (1 - (v - yLo) / Math.max(yHi - yLo, 0.0001)); };
+
+  ctx.save();
+  ctx.lineJoin = 'round';
+
+  // —— Y 轴网格 ——
+  const yTicks = 5;
+  const yDec = yRange >= 100 ? 0 : (yRange >= 10 ? 1 : (yRange >= 1 ? 2 : 3));
+  ctx.font = (11 * dpr) + 'px monospace';
+  for (let i = 0; i <= yTicks; i++) {
+    const val = yLo + (yHi - yLo) * i / yTicks;
+    const y = toY(val);
+    ctx.strokeStyle = '#1a1e2a'; ctx.lineWidth = 1 * dpr;
+    ctx.beginPath(); ctx.moveTo(m.left, y); ctx.lineTo(w - m.right, y); ctx.stroke();
+    ctx.fillStyle = '#6e7681'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(val.toFixed(yDec), m.left - 6 * dpr, y);
+  }
+
+  // —— X 轴时间刻度 ——
+  const steps = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 120];
+  const spanSec = spanMs / 1000;
+  let step = steps[steps.length - 1];
+  for (let s = 0; s < steps.length; s++) { if (spanSec / steps[s] <= 10) { step = steps[s]; break; } }
+  const firstTick = Math.ceil(tStart / 1000 / step) * step;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let ts = firstTick; ts * 1000 <= tEnd; ts += step) {
+    const x = toX(ts * 1000);
+    if (x < m.left || x > w - m.right) continue;
+    ctx.strokeStyle = '#161b22'; ctx.lineWidth = 1 * dpr;
+    ctx.beginPath(); ctx.moveTo(x, m.top); ctx.lineTo(x, m.top + phh); ctx.stroke();
+    ctx.fillStyle = '#6e7681';
+    ctx.fillText(ts.toFixed(step < 1 ? 2 : (step < 10 ? 1 : 0)) + 's', x, m.top + phh + 5 * dpr);
+  }
+
+  // —— 边框 ——
+  ctx.strokeStyle = '#484f58'; ctx.lineWidth = 1.5 * dpr;
+  ctx.strokeRect(m.left, m.top, pw, phh);
+
+  // —— 零线 ——
+  if (yLo <= 0 && yHi >= 0) {
+    const zy = toY(0);
+    ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1 * dpr;
+    ctx.setLineDash([4 * dpr, 4 * dpr]);
+    ctx.beginPath(); ctx.moveTo(m.left, zy); ctx.lineTo(w - m.right, zy); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // —— 曲线（点太密时抽稀，每像素最多 2 点）——
+  const total = i1 - i0 + 1;
+  const stride = Math.max(1, Math.floor(total / (pw * 2)));
+  const lastIdx = Math.min(i1, pidHistory.length - 1);
+  const lp = pidHistory[lastIdx];
+  ctx.lineWidth = 1.6 * dpr;
+  for (let k = 0; k < shown.length; k++) {
+    const ci = shown[k];
+    const c = pidChannels[ci];
+    ctx.strokeStyle = c.color;
+    ctx.beginPath();
+    let started = false;
+    for (let i = i0; i <= lastIdx; i += stride) {
+      const p = pidHistory[i];
+      const x = toX(p.t), y = toY(p.v[ci]);
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    if (started) ctx.lineTo(toX(lp.t), toY(lp.v[ci]));   // 一定画到最后一个点
+    ctx.stroke();
+    ctx.fillStyle = c.color;
+    ctx.beginPath(); ctx.arc(toX(lp.t), toY(lp.v[ci]), 2.2 * dpr, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // —— 右上角提示 ——
+  ctx.fillStyle = '#484f58'; ctx.font = (10 * dpr) + 'px monospace';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText('×' + pidZoomTime.toFixed(1) + '  滚轮缩放 · Shift+滚轮缩 Y · 拖拽平移 · 双击复位',
+    w - m.right, 2 * dpr);
+
+  // —— 轴名 ——
+  ctx.fillStyle = '#8b949e'; ctx.font = (11 * dpr) + 'px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillText('时间', m.left + pw / 2, h - 2 * dpr);
+  ctx.save();
+  ctx.translate(10 * dpr, m.top + phh / 2); ctx.rotate(-Math.PI / 2);
+  ctx.textBaseline = 'middle'; ctx.fillText('数值', 0, 0);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// ---------------- 鼠标交互 ----------------
+(function () {
+  const el = document.getElementById('pidCanvasWrap');
+  if (!el) return;
+
+  el.addEventListener('wheel', function (e) {
+    if (!pidCtx || pidHistory.length < 2) return;
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.2 : 0.8;
-    pidZoomX = Math.min(10, Math.max(0.2, pidZoomX * factor));
-    pidZoomY = Math.min(10, Math.max(0.2, pidZoomY * factor));
+    const f = e.deltaY < 0 ? 1.2 : (1 / 1.2);
+    if (e.shiftKey) pidZoomY = Math.min(200, Math.max(0.05, pidZoomY * f));
+    else pidZoomTime = Math.min(200, Math.max(0.05, pidZoomTime * f));
     drawPIDCanvas();
   }, { passive: false });
 
-  el.addEventListener('mousedown', (e) => {
+  el.addEventListener('mousedown', function (e) {
     pidDragging = true;
     pidDragStart = { x: e.clientX, y: e.clientY };
     pidPanStart = { x: pidPanX, y: pidPanY };
   });
-  window.addEventListener('mousemove', (e) => {
+
+  window.addEventListener('mousemove', function (e) {
     if (!pidDragging) return;
-    pidPanX = pidPanStart.x + (e.clientX - pidDragStart.x);
-    pidPanY = pidPanStart.y - (e.clientY - pidDragStart.y);
+    const dx = e.clientX - pidDragStart.x;
+    const dy = e.clientY - pidDragStart.y;
+    const dpr = pidDpr();
+    const pw = Math.max(1, pidW - 68 * dpr);
+    const phh = Math.max(1, pidH - 40 * dpr);
+    const spanMs = pidWinSec > 0 ? (pidWinSec * 1000) / pidZoomTime : 1000 / pidZoomTime;
+    pidPanX = pidPanStart.x - (dx / pw) * spanMs;
+    pidPanY = pidPanStart.y + (dy / phh) * pidCurYRange;
     drawPIDCanvas();
   });
-  window.addEventListener('mouseup', () => { pidDragging = false; });
+
+  window.addEventListener('mouseup', function () { pidDragging = false; });
+
+  el.addEventListener('dblclick', function () {
+    pidZoomTime = 1; pidZoomY = 1; pidPanX = 0; pidPanY = 0;
+    drawPIDCanvas();
+  });
 })();
 
-function roundToNice(v) { const p = Math.pow(10, Math.floor(Math.log10(Math.abs(v)||1))); return Math.round(v/p)*p; }
+// ---------------- 按钮 ----------------
+window.onPIDWindowChange = function () {
+  pidWinSec = parseFloat(document.getElementById('pidWindow').value) || 0;
+  pidZoomTime = 1; pidPanX = 0;
+  drawPIDCanvas();
+};
 
-function drawPIDCanvas() {
-  if (!pidCtx || pidHistory.length === 0) return;
-  document.getElementById('pidPlaceholder').style.display = 'none';
-  const ctx = pidCtx, w = pidW, h = pidH;
-  const margin = { top: 20, right: 20, bottom: 30, left: 55 };
-  const pw = w - margin.left - margin.right;
-  const ph = h - margin.top - margin.bottom;
+window.togglePIDHelp = function () {
+  const el = document.getElementById('pidHelp');
+  if (el) el.classList.toggle('hidden');
+};
 
-  ctx.clearRect(0, 0, w, h);
+window.exportPIDCSV = function () {
+  if (!pidHistory.length) { alert('还没有数据可以导出'); return; }
+  const head = ['time_ms'].concat(pidChannels.map(function (c) { return c.name; }));
+  const rows = pidHistory.map(function (p) {
+    return [p.t.toFixed(1)].concat(p.v.map(function (v) { return (v === undefined ? '' : v); }));
+  });
+  const csv = [head].concat(rows).map(function (r) { return r.join(','); }).join('\r\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  const p2 = function (n) { return ('0' + n).slice(-2); };
+  a.download = 'pid_' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate())
+    + '_' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds()) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+};
 
-  // Visible data
-  const totalPts = pidHistory.length;
-  const visPts = Math.max(10, Math.floor(totalPts / pidZoomX));
-  const startIdx = Math.max(0, totalPts - visPts - Math.floor(pidPanX / 10));
-  const visibleData = pidHistory.slice(startIdx);
-  const count = visibleData.length;
-  if (count < 2) return;
+window.clearPID = function () {
+  pidHistory = []; pidChannels = []; pidChanLocked = false; pidT0 = null;
+  pidZoomTime = 1; pidZoomY = 1; pidPanX = 0; pidPanY = 0;
+  renderPIDLegend();
+  updatePIDStats();
+  drawPIDCanvas();
+};
 
-  // Y range
-  let yMin = Infinity, yMax = -Infinity;
-  for (const p of visibleData) { yMin = Math.min(yMin, p.d, p.a); yMax = Math.max(yMax, p.d, p.a); }
-  const yRange = Math.max(yMax - yMin, 0.1);
-  const yCenter = (yMin + yMax) / 2;
-  const halfRange = yRange / (2 * pidZoomY);
-  const yLo = yCenter - halfRange + pidPanY;
-  const yHi = yCenter + halfRange + pidPanY;
-
-  const toX = (i) => margin.left + pw * i / (count - 1);
-  const toY = (v) => margin.top + ph * (1 - (v - yLo) / Math.max(yHi - yLo, 0.001));
-
-  // Y axis grid + labels
-  const yTickCount = 5;
-  for (let i = 0; i <= yTickCount; i++) {
-    const val = yLo + (yHi - yLo) * i / yTickCount;
-    const y = toY(val);
-    ctx.strokeStyle = i === 0 ? '#30363d' : '#1a1e2a'; ctx.lineWidth = i === 0 ? 2 : 1;
-    ctx.beginPath(); ctx.moveTo(margin.left, y); ctx.lineTo(w - margin.right, y); ctx.stroke();
-    ctx.fillStyle = '#6e7681'; ctx.font = '11px monospace'; ctx.textAlign = 'right';
-    ctx.fillText(val.toFixed(0), margin.left - 6, y + 4);
-  }
-
-  // X axis
-  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(margin.left, toY(yLo)); ctx.lineTo(w - margin.right, toY(yLo)); ctx.stroke();
-
-  // Axes frame
-  ctx.strokeStyle = '#484f58'; ctx.lineWidth = 2;
-  ctx.strokeRect(margin.left, margin.top, pw, ph);
-
-  // Zero line (if visible)
-  if (yLo <= 0 && yHi >= 0) {
-    const zeroY = toY(0);
-    ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-    ctx.beginPath(); ctx.moveTo(margin.left, zeroY); ctx.lineTo(w - margin.right, zeroY); ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  // Desired line (blue)
-  ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2; ctx.beginPath();
-  ctx.moveTo(toX(0), toY(visibleData[0].d));
-  for (let i = 1; i < count; i++) ctx.lineTo(toX(i), toY(visibleData[i].d));
-  ctx.stroke();
-
-  // Actual line (orange)
-  ctx.strokeStyle = '#f0883e'; ctx.lineWidth = 2; ctx.beginPath();
-  ctx.moveTo(toX(0), toY(visibleData[0].a));
-  for (let i = 1; i < count; i++) ctx.lineTo(toX(i), toY(visibleData[i].a));
-  ctx.stroke();
-
-  // Axis labels
-  ctx.fillStyle = '#8b949e'; ctx.font = '11px sans-serif';
-  ctx.textAlign = 'center'; ctx.fillText('时间 →', margin.left + pw/2, h - 4);
-  ctx.save(); ctx.translate(10, margin.top + ph/2); ctx.rotate(-Math.PI/2);
-  ctx.fillText('数值', 0, 0); ctx.restore();
-
-  // Zoom indicator
-  ctx.fillStyle = '#484f58'; ctx.font = '10px monospace'; ctx.textAlign = 'right';
-  ctx.fillText('×' + pidZoomX.toFixed(1) + ' 滚轮缩放 | 拖拽平移', w - margin.right, margin.top - 6);
-}
-
-window.addEventListener('resize', () => { if (pidCtx) initPIDCanvas(); });
-
-window.clearPID = function() { pidHistory = []; pidZoomX = 1; pidZoomY = 1; pidPanX = 0; pidPanY = 0; initPIDCanvas(); drawPIDCanvas(); };
-window.pausePID = function() {
+window.pausePID = function () {
   pidPaused = !pidPaused;
   document.getElementById('pidPause').textContent = pidPaused ? '继续' : '暂停';
 };
+
+// 新连接时把上一次的数据清干净
+function resetPIDSession() { window.clearPID(); }
+
+window.addEventListener('resize', function () { if (pidCtx) initPIDCanvas(); });
 
 // Keyboard shortcut
 document.addEventListener('keydown', (e) => {
