@@ -2097,31 +2097,48 @@ function escapeHTML(str) {
 // ============ Code examples ============
 
 const droneExamples = [
-  { id: 'ex_led', name: 'LED', desc: 'GPIO 输出控制 LED 闪烁', code: `// LED 闪烁示例
+  { id: 'ex_led', name: 'LED', desc: 'GPIO 输出控制 LED 闪烁（led.c / led.h）', files: [
+    { name: 'led.h', code: `#ifndef __LED_H
+#define __LED_H
+
 #include "stm32f10x.h"
 
-void LED_Init(void) {
+// 改成你板子上的 LED 引脚；这里用 PC13（蓝 pill / 最小系统板常见）
+#define LED_PIN     GPIO_Pin_13
+#define LED_PORT    GPIOC
+
+void LED_Init(void);   // 初始化引脚为推挽输出
+void LED_On(void);     // 点亮
+void LED_Off(void);    // 熄灭
+void LED_Toggle(void); // 翻转
+
+#endif` },
+    { name: 'led.c', code: `#include "led.h"
+
+// 坑：GPIO 挂在 APB2 总线，必须先开时钟，否则配置无效（总闸没合，喊破嗓子也没用）
+void LED_Init(void)
+{
     GPIO_InitTypeDef gpio;
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
-    gpio.GPIO_Pin = GPIO_Pin_13;
-    gpio.GPIO_Mode = GPIO_Mode_Out_PP;
+    gpio.GPIO_Pin   = LED_PIN;
+    gpio.GPIO_Mode  = GPIO_Mode_Out_PP;   // 推挽输出：能主动拉高也能拉低
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_Init(GPIOC, &gpio);
+    GPIO_Init(LED_PORT, &gpio);
+    LED_Off();   // 默认熄灭
 }
 
-void delay_ms(uint32_t ms) {
-    for(uint32_t i=0; i<ms*8000; i++);
-}
+// 注意：很多板子 PC13 是「低电平点亮」，若你的灯点不亮，把 On/Off 两个函数对调即可
+void LED_On(void)  { GPIO_SetBits(LED_PORT, LED_PIN); }
+void LED_Off(void) { GPIO_ResetBits(LED_PORT, LED_PIN); }
 
-int main(void) {
-    LED_Init();
-    while(1) {
-        GPIO_SetBits(GPIOC, GPIO_Pin_13);   // LED 亮
-        delay_ms(500);
-        GPIO_ResetBits(GPIOC, GPIO_Pin_13); // LED 灭
-        delay_ms(500);
-    }
+void LED_Toggle(void)
+{
+    if (GPIO_ReadOutputDataBit(LED_PORT, LED_PIN) == Bit_RESET)
+        GPIO_SetBits(LED_PORT, LED_PIN);
+    else
+        GPIO_ResetBits(LED_PORT, LED_PIN);
 }` },
+  ]},
   { id: 'ex_uart', name: '串口', desc: 'USART1 配置与 printf 输出', code: `// 串口打印示例
 #include "stm32f10x.h"
 #include <stdio.h>
@@ -2312,13 +2329,41 @@ remoteExamples.forEach(ex => {
   ex._btn = btn;
 });
 
+function escCode(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function switchCodeFile(btn){
+  var wrap = btn.closest('.code-tabs');
+  var i = btn.getAttribute('data-i');
+  wrap.querySelectorAll('.code-file-tab').forEach(function(t){ t.classList.toggle('active', t===btn); });
+  wrap.querySelectorAll('.code-file-panel').forEach(function(p){ p.classList.toggle('active', p.getAttribute('data-i')===i); });
+}
+
+function copyCode(btn){
+  var wrap = btn.closest('.code-file-tabs').closest('.code-tabs');
+  var panelEl = wrap.querySelector('.code-file-panel.active') || wrap.querySelector('.code-file-panel');
+  var pre = panelEl ? panelEl.querySelector('.code-block') : null;
+  if(!pre) return;
+  var text = pre.innerText || pre.textContent;
+  var ok = function(){ var o=btn.textContent; btn.textContent='已复制 ✓'; btn.classList.add('copied'); setTimeout(function(){ btn.textContent=o; btn.classList.remove('copied'); }, 1500); };
+  var fb = function(){ var ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); ok(); }catch(e){ alert('复制失败，请手动选择代码'); } document.body.removeChild(ta); };
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(ok).catch(fb); } else { fb(); }
+}
+
 function showExample(ex) {
   showMainView('hardware');
+  var codeHtml;
+  if (ex.files && ex.files.length) {
+    var tabs = ex.files.map(function(f,idx){ return '<button class="code-file-tab"'+(idx===0?' active':'')+'" data-i="'+idx+'" onclick="switchCodeFile(this)">'+f.name+'</button>'; }).join('');
+    var panels = ex.files.map(function(f,idx){ return '<div class="code-file-panel"'+(idx===0?' active':'')+'" data-i="'+idx+'"><div class="code-block">'+escCode(f.code)+'</div></div>'; }).join('');
+    codeHtml = '<div class="code-tabs"><div class="code-file-tabs">'+tabs+'<button class="copy-btn" onclick="copyCode(this)">复制</button></div>'+panels+'</div>';
+  } else {
+    codeHtml = '<div class="code-tabs"><div class="code-file-tabs"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><div class="code-file-panel active"><div class="code-block">'+escCode(ex.code)+'</div></div></div>';
+  }
   panel.innerHTML = '<h3>📝 ' + ex.name + ' 例程</h3>' +
     '<p class="desc">' + ex.desc + '</p>' +
     '<div class="info-section">' +
     '<div class="info-section-header" onclick="this.parentElement.classList.toggle(\'collapsed\')">源代码 <span class="arr">▼</span></div>' +
-    '<div class="info-section-body"><div class="code-block">' + ex.code.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div></div>' +
+    '<div class="info-section-body">' + codeHtml + '</div>' +
     '</div>';
 }
 
