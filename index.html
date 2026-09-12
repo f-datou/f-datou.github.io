@@ -319,9 +319,31 @@
       .panel { width: 100%; }
       .adjust-bar { left: 0; right: 0; }
     }
+
+    .mobile-tip {
+      display: none;
+      align-items: flex-start; gap: 10px;
+      padding: 12px 16px;
+      background: #FAEEDA; border-bottom: 1px solid #FAC775;
+      color: #633806; font-size: 13px; line-height: 1.6;
+    }
+    .mobile-tip b { color: #4A1B0C; }
+    .mobile-tip .mt-close {
+      flex: 0 0 auto; margin-left: auto;
+      background: none; border: none; cursor: pointer;
+      font-size: 20px; line-height: 1; color: #633806; padding: 0 4px;
+    }
+    @media (hover: none) and (pointer: coarse) {
+      .mobile-tip { display: flex; }
+    }
   </style>
 </head>
 <body>
+
+<div class="mobile-tip" id="mobileTip">
+  <span>📱 你在用手机浏览。教程和代码都能看；<b>串口 / PID 调试</b>需要在电脑版 Chrome 或 Edge 上打开 f-datou.github.io。</span>
+  <button class="mt-close" onclick="document.getElementById('mobileTip').style.display='none'">&times;</button>
+</div>
 
 <div class="header">
   <h1><span class="icon">🚁</span> 四轴飞行器教程</h1>
